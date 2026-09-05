@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الصيدلية الذكية SP | البوابة الرئيسية</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    
+        </script>
+    <link rel="stylesheet" href="assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="assets/css/chatbot-widget.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container" style="max-width: 1280px; margin-top: 2rem; margin-bottom: 3rem;">
+        <!-- Luxury Hero Banner -->
+        <div class="card" style="padding: 2.25rem 2rem; background: linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(56, 189, 248, 0.04) 100%), var(--bg-card); border-right: 5px solid var(--primary); border-radius: 18px; margin-bottom: 1.75rem; box-shadow: var(--shadow-md);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.25rem;">
+                <div>
+                    <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary-light); padding: 0.3rem 0.85rem; border-radius: 9999px; margin-bottom: 0.75rem; border: 1px solid rgba(2, 132, 199, 0.2);">
+                        <span class="pulse-dot"></span>
+                        <span style="font-size: 0.8rem; font-weight: 800; color: var(--primary-dark);">المنظومة الذكية 2026 - SP</span>
+                    </div>
+                    <h1 style="font-size: 1.65rem; font-weight: 900; color: var(--text-main); margin: 0; line-height: 1.3;">الصيدلية الذكية (SP)</h1>
+                    <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.4rem; max-width: 680px; line-height: 1.6;">منصة متكاملة لصرف الأدوية، تتبع المخزون الحي، التنبؤ التكيفي بالطلب، وإدارة الفواتير الضريبية والموردين.</p>
+                </div>
+                <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center;">
+                    <a href="pages/order_create.html" class="btn btn-pos" style="font-size: 0.92rem; padding: 0.65rem 1.4rem; border-radius: var(--radius-full);">
+                        + نقطة البيع (POS)
+                    </a>
+                    <a href="pages/medicines.html" class="btn btn-secondary" style="font-size: 0.9rem; padding: 0.65rem 1.2rem; border-radius: var(--radius-full);">
+                        دليل الأدوية
+                    </a>
+                    <a href="pages/predictions.html" class="btn btn-secondary" style="font-size: 0.9rem; padding: 0.65rem 1.2rem; border-radius: var(--radius-full);">
+                        التنبؤ بالطلب
+                    </a>
+                    <a href="pages/chat.html" class="btn btn-secondary" style="font-size: 0.9rem; padding: 0.65rem 1.2rem; border-radius: var(--radius-full);">
+                        المساعد الذكي
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live KPI Metrics Grid -->
+        <div class="kpi-grid" style="margin-bottom: 1.75rem;">
+            <div class="kpi-card kpi-primary" style="border-radius: 16px; padding: 1.4rem;">
+                <div class="kpi-title">إجمالي الأصناف المسجلة</div>
+                <div class="kpi-value" id="kpiTotalMeds" style="font-size: 2.1rem; color: var(--primary);">121 صنف</div>
+                <div class="kpi-sub" style="color: var(--primary); font-weight: 700;">مزامنة فورية حية للمخزون</div>
+            </div>
+
+            <div class="kpi-card kpi-success" style="border-radius: 16px; padding: 1.4rem;">
+                <div class="kpi-title">فواتير الصرف والمبيعات</div>
+                <div class="kpi-value" id="kpiTotalOrders" style="font-size: 2.1rem; color: var(--success);">38 فاتورة</div>
+                <div class="kpi-sub" style="color: var(--text-muted);">إجمالي المبيعات: <strong id="kpiTotalSales" style="color: var(--text-main);">1,460 ريال</strong></div>
+            </div>
+
+            <div class="kpi-card kpi-danger" style="border-radius: 16px; padding: 1.4rem;">
+                <div class="kpi-title">أصناف تحت حد الطلب (حرج)</div>
+                <div class="kpi-value" id="kpiCriticalMeds" style="font-size: 2.1rem; color: var(--danger);">3 أصناف</div>
+                <div class="kpi-sub" style="color: var(--danger); font-weight: 700;">تستوجب أمر شراء وتوريد عاجل</div>
+            </div>
+
+            <div class="kpi-card kpi-warning" style="border-radius: 16px; padding: 1.4rem;">
+                <div class="kpi-title">دقة التنبؤ بنفاد الأدوية</div>
+                <div class="kpi-value" style="font-size: 2.1rem; color: var(--warning);">94.2%</div>
+                <div class="kpi-sub" style="color: var(--text-muted);">تحديد كميات التوريد المثالية تلقائياً</div>
+            </div>
+        </div>
+
+        
+        
+        
+        <!-- Urgent Stock Notice Strip -->
+        <div class="urgent-ticker-banner" style="border-radius: 14px; padding: 1rem 1.4rem; margin-bottom: 1.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span class="badge badge-danger" style="font-size: 0.82rem; padding: 0.35rem 0.85rem;">تنبيه مخزون حرج</span>
+                <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">
+                    يوجد 3 أصناف اقتربت من النفاد وتحتاج إعادة طلب (أوجمنتين 1 جم، فولتارين 50 مجم، تاڤانيك 500 مجم).
+                </span>
+            </div>
+            <a href="pages/predictions.html" class="btn btn-pos" style="font-size: 0.82rem; padding: 0.35rem 0.95rem; border-radius: var(--radius-full);">توصيات الشراء الذكية</a>
+        </div>
+
+        <!-- Clean Services Hub Grid -->
+        <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="font-size: 1.2rem; font-weight: 900; color: var(--text-main); margin: 0;">الخدمات والعمليات الأساسية</h2>
+            </div>
+
+            <div class="quick-actions-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+                <a href="pages/order_create.html" class="action-card-modern" style="border-top: 4px solid var(--primary); border-radius: 16px;">
+                    <div>
+                        <div class="action-card-title">نقطة البيع وصرف الفواتير (POS)</div>
+                        <div class="action-card-desc">إصدار فواتير الصرف النقدي والتأمين وأقسام المستشفى مع طباعة حرارية فورية وفاتورة A4 رسمية.</div>
+                    </div>
+                    <div class="action-card-btn">فتح شاشة الصرف &larr;</div>
+                </a>
+
+                <a href="pages/medicines.html" class="action-card-modern" style="border-top: 4px solid var(--success); border-radius: 16px;">
+                    <div>
+                        <div class="action-card-title">دليل الأدوية والمخزون الحي</div>
+                        <div class="action-card-desc">استعراض 120+ صنفاً دوائياً، تصفية المجموعات العلاجية، وتحديث الأرصدة والأسعار لحظياً مع تصدير XML.</div>
+                    </div>
+                    <div class="action-card-btn" style="color: var(--success);">استعراض الأدوية &larr;</div>
+                </a>
+
+                <a href="pages/predictions.html" class="action-card-modern" style="border-top: 4px solid var(--warning); border-radius: 16px;">
+                    <div>
+                        <div class="action-card-title">التنبؤ الذكي بالاستهلاك والتوريد</div>
+                        <div class="action-card-desc">توقع استهلاك الأدوية للأيام القادمة بالذكاء الاصطناعي واقتراح كميات الشراء المناسبة لتفادي النقص.</div>
+                    </div>
+                    <div class="action-card-btn" style="color: var(--warning);">لوحة التنبؤ &larr;</div>
+                </a>
+
+                <a href="pages/orders.html" class="action-card-modern" style="border-top: 4px solid var(--primary-dark); border-radius: 16px;">
+                    <div>
+                        <div class="action-card-title">سجل الفواتير والطلبيات</div>
+                        <div class="action-card-desc">أرشيف شامل لعمليات الصرف السابقة، طلبات الأدوية المرسلة للإدارة، وفواتير التوريد مع المعاينة والطباعة.</div>
+                    </div>
+                    <div class="action-card-btn" style="color: var(--primary-dark);">أرشيف الفواتير &larr;</div>
+                </a>
+
+                <a href="pages/chat.html" class="action-card-modern" style="border-top: 4px solid var(--mint-dark); border-radius: 16px;">
+                    <div>
+                        <div class="action-card-title">الصيدلي السريري الذكي</div>
+                        <div class="action-card-desc">استشارات فورية عن البدائل المتكافئة، فحص التداخلات الدوائية الخطرة، وحساب الجرعات بحسب الوزن والعمر.</div>
+                    </div>
+                    <div class="action-card-btn" style="color: var(--mint-dark);">محادثة المساعد &larr;</div>
+                </a>
+
+                <a href="pages/suppliers.html" class="action-card-modern" style="border-top: 4px solid var(--accent); border-radius: 16px;">
+                    <div>
+                        <div class="action-card-title">دليل الشركات الموردة</div>
+                        <div class="action-card-desc">إدارة الموردين المعتمدين، السجلات التجارية، الأرقام الضريبية، وإصدار أوامر الشراء المباشرة.</div>
+                    </div>
+                    <div class="action-card-btn" style="color: var(--accent);">دليل الموردين &larr;</div>
+                </a>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+        </script>
+    <script src="assets/js/supabase-client.js">
+        </script>
+    <script src="assets/js/api.js">
+        </script>
+    <script src="assets/js/app.js">
+        </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // تحميل أحدث إحصائيات المخزون والمبيعات
+            try {
+                const medsRes = await APIClient.request('medicines.php');
+                if (medsRes.success && medsRes.data) {
+                    const meds = medsRes.data;
+                    document.getElementById('kpiTotalMeds').textContent = `${meds.length} صنف`;
+                    const crit = meds.filter(m => (m.stock_quantity || 0) <= 20);
+                    document.getElementById('kpiCriticalMeds').textContent = `${crit.length} أصناف`;
+                }
+
+                const ordersRes = await APIClient.request('orders.php');
+                if (ordersRes.success && ordersRes.data) {
+                    const orders = ordersRes.data;
+                    document.getElementById('kpiTotalOrders').textContent = `${orders.length} فواتير`;
+                    const totalSum = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
+                    document.getElementById('kpiTotalSales').textContent = `${totalSum.toFixed(2)} ريال`;
+                }
+            } catch (e) {}
+        });
+    
+        </script>
+</body>
+</html>

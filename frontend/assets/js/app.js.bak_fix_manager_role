@@ -1,0 +1,358 @@
+// Auto-migrate and update cached demo user session in localStorage immediately
+(function autoUpdateSession() {
+    try {
+        const raw = localStorage.getItem('user_data');
+        if (raw) {
+            const u = JSON.parse(raw);
+            const email = (u.email || '').toLowerCase().trim();
+            const role = (u.role || '').toLowerCase().trim();
+
+            if (email.includes('admin') || role === 'admin' || email.includes('supervisor') || role === 'supervisor' || role === 'manager') {
+                u.username = 'مدير الصيدلية';
+                u.role = 'supervisor';
+                u.email = 'manager@hospital.local';
+                localStorage.setItem('user_data', JSON.stringify(u));
+            } else {
+                u.username = 'الصيدلي (كاشير)';
+                u.role = 'staff';
+                u.email = 'pharmacist@hospital.local';
+                localStorage.setItem('user_data', JSON.stringify(u));
+            }
+        }
+    } catch (e) {
+        console.error('Session update error:', e);
+    }
+})();
+
+// Dynamic Auth, Role-Based Access Control (RBAC), and Navigation System
+class AppAuth {
+    static getUser() {
+        try {
+            const data = localStorage.getItem('user_data');
+            return data ? JSON.parse(data) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    static getToken() {
+        return localStorage.getItem('jwt_token');
+    }
+
+    static isAuthenticated() {
+        return !!(this.getToken() && this.getUser());
+    }
+
+    static getNormalizedRole() {
+        const user = this.getUser();
+        if (!user || !user.role) return null;
+        const r = user.role.toLowerCase().trim();
+        if (r === 'supervisor' || r === 'manager' || r === 'admin' || r === 'administrator') return 'supervisor';
+        return 'staff';
+    }
+
+    static getRoleLabel(role = null) {
+        const r = role ? role.toLowerCase().trim() : this.getNormalizedRole();
+        if (r === 'supervisor' || r === 'admin') return 'مدير الصيدلية';
+        return 'صيدلي (كاشير)';
+    }
+
+    static getDefaultPage() {
+        const role = this.getNormalizedRole();
+        return (role === 'supervisor') ? 'dashboard.html' : 'order_create.html';
+    }
+
+    static logout() {
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('user_data');
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const loginUrl = isSubpage ? 'login.html' : 'pages/login.html';
+        window.location.href = loginUrl;
+    }
+
+    /**
+     * حماية الصفحات وتوجيه المستخدم بسلاسة بدون تعليق الشاشة
+     */
+    static requireAuth(allowedRoles = null) {
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const loginUrl = isSubpage ? 'login.html' : 'pages/login.html';
+
+        if (!this.isAuthenticated()) {
+            localStorage.setItem('redirect_after_login', window.location.href);
+            window.location.href = loginUrl;
+            return false;
+        }
+
+        if (allowedRoles && allowedRoles.length > 0) {
+            const currentRole = this.getNormalizedRole();
+            const normalizedAllowed = allowedRoles.map(r => r.toLowerCase().trim());
+            const isAllowed = normalizedAllowed.includes(currentRole) || 
+                              (currentRole === 'staff' && normalizedAllowed.includes('pharmacist'));
+
+            if (!isAllowed) {
+                const targetPage = isSubpage ? 'medicines.html' : 'pages/medicines.html';
+                window.location.href = targetPage;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * بناء وتحديث شريط التنقل ديناميكياً
+     */
+    static renderNavbar() {
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const prefix = isSubpage ? '' : 'pages/';
+        const rootPrefix = isSubpage ? '../index.html' : 'index.html';
+        const currentFile = window.location.pathname.split('/').pop() || 'index.html';
+
+        const navContainer = document.querySelector('.navbar');
+        if (!navContainer) return;
+
+        const isAuth = this.isAuthenticated();
+        const user = this.getUser();
+        const role = this.getNormalizedRole();
+
+        let navLinksHtml = '';
+
+        if (!isAuth) {
+            navLinksHtml = `
+                <li><a href="${rootPrefix}" class="${currentFile === 'index.html' ? 'active' : ''}">الرئيسية</a></li>
+                <li><a href="${prefix}chat.html" class="${currentFile === 'chat.html' ? 'active' : ''}">المساعد الذكي</a></li>
+                <li><a href="${prefix}login.html" class="${currentFile === 'login.html' ? 'active' : ''}">تسجيل الدخول</a></li>
+                <li><a href="${prefix}register.html" class="${currentFile === 'register.html' ? 'active' : ''}">إنشاء حساب</a></li>
+            `;
+        } else {
+            let links = [
+                { url: `${rootPrefix}`, title: 'الرئيسية', file: 'index.html', roles: ['supervisor', 'staff'] },
+                { url: `${prefix}dashboard.html`, title: 'المؤشرات', file: 'dashboard.html', roles: ['supervisor'] },
+                { url: `${prefix}inventory.html`, title: 'المخزون', file: 'inventory.html', roles: ['supervisor'] },
+                { url: `${prefix}medicines.html`, title: 'الأدوية', file: 'medicines.html', roles: ['supervisor', 'staff'] },
+                { url: `${prefix}orders.html`, title: 'الفواتير', file: 'orders.html', roles: ['supervisor', 'staff'] },
+                { url: `${prefix}predictions.html`, title: 'التنبؤ الذكي', file: 'predictions.html', roles: ['supervisor', 'staff'] },
+                { url: `${prefix}chat.html`, title: 'المساعد الذكي', file: 'chat.html', roles: ['supervisor', 'staff'] },
+                { url: `${prefix}suppliers.html`, title: 'الموردين', file: 'suppliers.html', roles: ['supervisor'] },
+                { url: `${prefix}settings.html`, title: 'الإعدادات', file: 'settings.html', roles: ['supervisor'] }
+            ];
+
+            links.forEach(l => {
+                if (l.roles.includes(role)) {
+                    const isActive = currentFile === l.file ? 'active' : '';
+                    navLinksHtml += `<li><a href="${l.url}" class="${isActive}">${l.title}</a></li>`;
+                }
+            });
+        }
+
+        let userSectionHtml = '';
+        const newOrderUrl = `${prefix}order_create.html`;
+
+        if (isAuth && user) {
+            const roleBadgeColor = (role === 'supervisor') ? '#d97706' : '#0284c7';
+            userSectionHtml = `
+                <div class="nav-user-section">
+                    <a href="${newOrderUrl}" class="btn btn-pos" style="padding: 0.35rem 0.85rem; font-size: 0.82rem; text-decoration: none; border-radius: var(--radius-btn);">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-inline-end: 0.25rem; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>صرف فاتورة (POS)</span>
+                    </a>
+                    <a href="${prefix}profile.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.4rem; background: var(--bg-hover); padding: 0.25rem 0.65rem; border-radius: var(--radius-btn); font-weight: 700; font-size: 0.82rem; color: var(--text-main); border: 1px solid var(--border); transition: var(--transition);">
+                        <span>${user.username || 'المستخدم'}</span>
+                        <span style="font-size: 0.72rem; background: ${roleBadgeColor}; color: #ffffff; padding: 1px 6px; border-radius: 6px; font-weight: 700;">${this.getRoleLabel(role)}</span>
+                    </a>
+                    <button class="theme-toggle" onclick="toggleTheme()" title="تبديل المظهر النهاري/الليلي" style="padding: 0.25rem 0.55rem; font-size: 0.8rem; border-radius: var(--radius-btn);">المظهر</button>
+                    <button class="btn btn-secondary" onclick="AppAuth.logout()" style="padding: 0.25rem 0.6rem; font-size: 0.8rem; color: var(--danger); border-color: rgba(220, 38, 38, 0.3); border-radius: var(--radius-btn);">خروج</button>
+                </div>
+            `;
+        } else {
+            userSectionHtml = `
+                <div class="nav-user-section">
+                    <a href="${prefix}login.html" class="btn" style="padding: 0.35rem 0.85rem; font-size: 0.85rem; border-radius: var(--radius-btn);">تسجيل الدخول</a>
+                    <button class="theme-toggle" onclick="toggleTheme()" style="padding: 0.25rem 0.55rem; font-size: 0.8rem; border-radius: var(--radius-btn);">المظهر</button>
+                </div>
+            `;
+        }
+
+        navContainer.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <a href="${rootPrefix}" class="logo" style="text-decoration: none;">
+                    <span class="hospital-icon-badge" title="الصيدلية الذكية SP">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="18" height="18" x="3" y="3" rx="5"/>
+                            <path d="M12 8v8M8 12h8"/>
+                        </svg>
+                    </span>
+                    <span>SP</span>
+                    <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); border-right: 1.5px solid var(--border); padding-right: 0.5rem; margin-right: 0.2rem;">الصيدلية الذكية</span>
+                </a>
+                <div style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; background: var(--bg-hover); padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-muted);" title="سحابة Supabase نشطة ومتصلة">
+                    <span class="pulse-dot"></span>
+                    <span>سحابي</span>
+                </div>
+            </div>
+            <ul class="nav-links">
+                ${navLinksHtml}
+            </ul>
+            ${userSectionHtml}
+        `;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.body.setAttribute('data-theme', savedTheme);
+    AppAuth.renderNavbar();
+
+    // تحميل سكريبت الويدجت العائم تلقائياً إذا لم يكن مضافاً
+    if (!document.getElementById('spmsChatFab') && !window.location.pathname.endsWith('chat.html')) {
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const script = document.createElement('script');
+        script.src = isSubpage ? '../assets/js/chatbot-widget.js' : 'assets/js/chatbot-widget.js';
+        document.body.appendChild(script);
+    }
+});
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'light';
+    const nextTheme = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    document.body.setAttribute('data-theme', nextTheme);
+    localStorage.setItem('theme', nextTheme);
+}
+
+function showNotification(msg, type = 'success') {
+    const div = document.createElement('div');
+    div.className = `badge badge-${type}`;
+    div.style.position = 'fixed';
+    div.style.bottom = '24px';
+    div.style.right = '24px';
+    div.style.padding = '12px 24px';
+    div.style.zIndex = '99999';
+    div.style.borderRadius = '9999px';
+    div.style.boxShadow = '0 10px 25px -3px rgba(15, 23, 42, 0.2)';
+    div.style.fontSize = '0.9rem';
+    div.style.fontWeight = '700';
+    div.style.fontFamily = "'Times New Roman', Times, 'Simplified Arabic', serif";
+    div.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+    div.style.transform = 'translateY(30px)';
+    div.style.opacity = '0';
+    div.textContent = msg;
+    document.body.appendChild(div);
+
+    requestAnimationFrame(() => {
+        div.style.transform = 'translateY(0)';
+        div.style.opacity = '1';
+    });
+
+    setTimeout(() => {
+        div.style.transform = 'translateY(20px)';
+        div.style.opacity = '0';
+        setTimeout(() => div.remove(), 300);
+    }, 3200);
+}
+
+
+
+// =========================================================================
+// Global Suppliers Storage and Management System
+// =========================================================================
+window.getSuppliersList = function() {
+    const defaultSuppliers = [
+        { id: 1, name: "الشركة الوطنية للتموين الطبي الموحد", contact_person: "أ. خالد النجار", phone: "0501234567", email: "supply@national-med.sa", address: "الرياض - طريق الملك فهد", specialty: "أدوية عامة ومضادات" },
+        { id: 2, name: "مؤسسة الأدوية والمستلزمات الطبية الحديثة", contact_person: "د. سامي الحداد", phone: "0559876543", email: "info@modern-pharma.sa", address: "جدة - شارع الأندلس", specialty: "أدوية القلب والسكري" },
+        { id: 3, name: "مستودع الأمل الدوائي المركزي", contact_person: "أ. طارق العريقي", phone: "0543210987", email: "sales@alamal-pharma.sa", address: "مكة المكرمة - العزيزية", specialty: "محاليل ومسكنات وفيتامينات" }
+    ];
+    try {
+        const custom = localStorage.getItem('custom_suppliers');
+        if (custom) {
+            const parsed = JSON.parse(custom);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return [...defaultSuppliers, ...parsed];
+            }
+        }
+    } catch (e) {}
+    return defaultSuppliers;
+};
+
+window.saveCustomSupplier = function(sup) {
+    try {
+        const custom = localStorage.getItem('custom_suppliers');
+        let list = custom ? JSON.parse(custom) : [];
+        const newId = 100 + list.length + 1;
+        sup.id = newId;
+        list.push(sup);
+        localStorage.setItem('custom_suppliers', JSON.stringify(list));
+        return sup;
+    } catch (e) {
+        console.error("Save supplier error:", e);
+        return sup;
+    }
+};
+
+
+// =========================================================================
+// Internal Medicine Requisition System (Pharmacist -> Pharmacy Manager)
+// =========================================================================
+window.getMedicineRequests = function() {
+    const defaultReqs = [
+        {
+            id: 1,
+            medicine_name: "أوجمنتين 1 جم (Augmentin 1g)",
+            requested_qty: 40,
+            priority: "عاجل",
+            requested_by: "الصيدلي (كاشير)",
+            notes: "الرصيد أوشك على النفاد ومطلوب لمرضى العيادات الخارجية",
+            status: "قيد المراجعة",
+            created_at: "2026-08-30 18:30"
+        },
+        {
+            id: 2,
+            medicine_name: "كونكور 5 مجم (Concor 5mg)",
+            requested_qty: 60,
+            priority: "عادي",
+            requested_by: "الصيدلي (كاشير)",
+            notes: "طلب استباقي لتغطية استهلاك الأسبوع القادم",
+            status: "معتمد للتوريد",
+            created_at: "2026-08-30 16:15"
+        }
+    ];
+    try {
+        const stored = localStorage.getItem('pharmacy_medicine_requests');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch (e) {}
+    return defaultReqs;
+};
+
+window.saveMedicineRequest = function(req) {
+    try {
+        const list = window.getMedicineRequests();
+        const newId = list.length > 0 ? Math.max(...list.map(x => x.id || 0)) + 1 : 1;
+        req.id = newId;
+        req.created_at = new Date().toISOString().replace('T', ' ').substring(0, 16);
+        req.status = "قيد المراجعة";
+        list.unshift(req);
+        localStorage.setItem('pharmacy_medicine_requests', JSON.stringify(list));
+        return req;
+    } catch (e) {
+        console.error("Error saving medicine request:", e);
+        return req;
+    }
+};
+
+window.updateMedicineRequestStatus = function(id, status, notes = '') {
+    try {
+        const list = window.getMedicineRequests();
+        const item = list.find(x => x.id === id);
+        if (item) {
+            item.status = status;
+            if (notes) item.manager_notes = notes;
+            localStorage.setItem('pharmacy_medicine_requests', JSON.stringify(list));
+        }
+        return item;
+    } catch (e) {
+        console.error("Error updating request status:", e);
+    }
+};

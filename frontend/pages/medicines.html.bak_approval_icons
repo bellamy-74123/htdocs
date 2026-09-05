@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل الأدوية والمخزون | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    
+        function requestMedicineSupply(medName) {
+            window.location.href = `orders.html?action=request&med=${encodeURIComponent(medName)}`;
+        }
+
+</script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <div class="card" style="padding: 1.5rem;">
+            <div class="card-header" style="margin-bottom: 1rem;">
+                <div>
+                    <h2 style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0;">دليل الأدوية والمخزون الحي</h2>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">إدارة 120+ صنفاً دوائياً من كافة المجموعات العلاجية، تصفية المجموعات العلاجية، ومتابعة الأرصدة والأسعار لحظياً.</p>
+                </div>
+                <div id="addMedBtnContainer" style="display: flex; gap: 0.5rem; align-items: center;"></div>
+            </div>
+
+            <!-- Search & Actions Bar -->
+            <div style="display: flex; gap: 0.6rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                <input type="text" id="searchInput" class="form-control" style="flex: 2; min-width: 260px; font-weight: 600;" placeholder="بحث فوري بالاسم التجاري، العلمي، أو البديل (مثال: بندول، فلترين، أوجمنتين)..." oninput="handleInstantSearch(this.value)">
+                <button class="btn" onclick="performSmartSearch()" style="padding: 0.55rem 1.4rem;">بحث ذكي</button>
+                <button class="btn btn-secondary" onclick="resetFiltersAndLoad()">إعادة ضبط</button>
+                <button class="btn btn-secondary" onclick="downloadXmlFormat()" title="تصدير بيانات الأدوية بصيغة XML">تصدير XML</button>
+            </div>
+
+            <!-- Category Filter Pills -->
+            <div class="pill-filter-bar" id="categoryPillBar" style="flex-wrap: wrap;">
+                <span style="font-size: 0.82rem; font-weight: 800; color: var(--text-muted); margin-left: 0.25rem;">الفئة العلاجية:</span>
+                <button class="pill-btn active" id="btnFilterAll" onclick="filterByCategory('all', this)">كافة الأصناف (121)</button>
+                <button class="pill-btn" onclick="filterByCategory('gastrointestinal', this)">جهاز هضمي ومعدة</button>
+                <button class="pill-btn" onclick="filterByCategory('analgesic', this)">مسكنات وحرارة</button>
+                <button class="pill-btn" onclick="filterByCategory('nsaid', this)">مضادات التهاب</button>
+                <button class="pill-btn" onclick="filterByCategory('cardio', this)">قلب وضغط ودهون</button>
+                <button class="pill-btn" onclick="filterByCategory('diabetes', this)">سكري وغدد</button>
+                <button class="pill-btn" onclick="filterByCategory('respiratory', this)">تنفسي وحساسية</button>
+                <button class="pill-btn" onclick="filterByCategory('antibiotic', this)">مضادات حيوية</button>
+                <button class="pill-btn" onclick="filterByCategory('cns', this)">نفسي وأعصاب</button>
+                <button class="pill-btn" onclick="filterByCategory('vitamins', this)">فيتامينات ومعادن</button>
+                <button class="pill-btn" onclick="filterByCategory('derm', this)">جلدية وعيون</button>
+            </div>
+
+            <!-- Stock Status Filter Pills -->
+            <div class="pill-filter-bar" id="stockStatusPillBar" style="margin-top: 0; margin-bottom: 1.25rem;">
+                <span style="font-size: 0.82rem; font-weight: 800; color: var(--text-muted); margin-left: 0.25rem;">حالة المخزون:</span>
+                <button class="pill-btn active" onclick="filterByStock('all', this)">جميع الأرصدة</button>
+                <button class="pill-btn" onclick="filterByStock('safe', this)" style="color: var(--success);">مخزون آمن (>30)</button>
+                <button class="pill-btn" onclick="filterByStock('low', this)" style="color: var(--warning);">منخفض (16-30)</button>
+                <button class="pill-btn" onclick="filterByStock('critical', this)" style="color: var(--danger);">حرج وشك النفاد (≤15)</button>
+            </div>
+
+            <table style="margin-top: 0.5rem;">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>الصنف التجاري</th>
+                        <th>المادة الفعالة (Generic)</th>
+                        <th>المجموعة العلاجية</th>
+                        <th>سعر الوحدة</th>
+                        <th>الرصيد المتاح</th>
+                        <th>تاريخ الصلاحية</th>
+                        <th>حالة المخزون</th>
+                        <th style="text-align: center;">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="medicineTableBody">
+                    <tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-muted);">جاري استرجاع بيانات الأدوية...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        let searchDebounceTimer = null;
+        function handleInstantSearch(val) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                performSmartSearch();
+            }, 100);
+        }
+
+        if (AppAuth.requireAuth()) {
+            const role = AppAuth.getNormalizedRole();
+            if (role === 'supervisor') {
+                document.getElementById('addMedBtnContainer').innerHTML = `
+                    <a href="inventory.html" class="btn btn-secondary" style="font-size: 0.88rem;">سجل المخزون</a>
+                    <a href="medicine_form.html" class="btn" style="font-size: 0.88rem;">+ إضافة صنف جديد</a>
+                `;
+            }
+            loadMedicines();
+
+            document.getElementById('searchInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    performSmartSearch();
+                }
+            });
+        }
+
+        let allMedicines = (typeof DEMO_MEDICINES !== 'undefined' && Array.isArray(DEMO_MEDICINES)) ? [...DEMO_MEDICINES] : [];
+
+        async function loadMedicines() {
+            try {
+                const res = await APIClient.request('medicines.php');
+                if (res.success && res.data && res.data.length > 0) {
+                    allMedicines = res.data;
+                    renderTable(allMedicines);
+                } else {
+                    useFallbackList();
+                }
+            } catch (e) {
+                useFallbackList();
+            }
+        }
+
+        function useFallbackList() {
+            allMedicines = (typeof DEMO_MEDICINES !== 'undefined' && DEMO_MEDICINES.length > 0) ? DEMO_MEDICINES : [];
+            renderTable(allMedicines);
+            const btnAll = document.getElementById('btnFilterAll');
+            if (btnAll) btnAll.textContent = `كافة الأصناف (${allMedicines.length})`;
+        }
+
+        let currentCategoryFilter = 'all';
+        let currentStockFilter = 'all';
+
+        function filterByCategory(cat, btn) {
+            currentCategoryFilter = cat;
+            document.querySelectorAll('#categoryPillBar .pill-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            applyFilters();
+        }
+
+        function filterByStock(st, btn) {
+            currentStockFilter = st;
+            document.querySelectorAll('#stockStatusPillBar .pill-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            applyFilters();
+        }
+
+        function resetFiltersAndLoad() {
+            currentCategoryFilter = 'all';
+            currentStockFilter = 'all';
+            document.getElementById('searchInput').value = '';
+            document.querySelectorAll('#categoryPillBar .pill-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+            document.querySelectorAll('#stockStatusPillBar .pill-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+            renderTable(allMedicines);
+        }
+
+        function applyFilters() {
+            let list = [...allMedicines];
+
+            // تصفية الفئة
+            if (currentCategoryFilter !== 'all') {
+                list = list.filter(m => {
+                    const c = (m.category || '').toLowerCase();
+                    if (currentCategoryFilter === 'gastrointestinal') return c.includes('هضم') || c.includes('معدة') || c.includes('قولون') || c.includes('ppi') || c.includes('gastro');
+                    if (currentCategoryFilter === 'analgesic') return c.includes('مسكن') || c.includes('حرارة') || c.includes('analgesic');
+                    if (currentCategoryFilter === 'nsaid') return c.includes('التهاب') || c.includes('مفاصل') || c.includes('عظام') || c.includes('عضلات') || c.includes('nsaid');
+                    if (currentCategoryFilter === 'cardio') return c.includes('قلب') || c.includes('ضغط') || c.includes('كوليسترول') || c.includes('دهون') || c.includes('سيولة') || c.includes('جلطات');
+                    if (currentCategoryFilter === 'diabetes') return c.includes('سكر') || c.includes('غدد') || c.includes('درقية') || c.includes('إنسولين');
+                    if (currentCategoryFilter === 'respiratory') return c.includes('تنفس') || c.includes('حساسية') || c.includes('ربو') || c.includes('كحة') || c.includes('أنف') || c.includes('بلغم');
+                    if (currentCategoryFilter === 'antibiotic') return c.includes('مضاد حيوي') || c.includes('ميكروب') || c.includes('فطريات') || c.includes('فيروس') || c.includes('antibiotic');
+                    if (currentCategoryFilter === 'cns') return c.includes('نفسي') || c.includes('عصب') || c.includes('اكتئاب') || c.includes('صرع') || c.includes('قلق') || c.includes('ذهان');
+                    if (currentCategoryFilter === 'vitamins') return c.includes('فيتامين') || c.includes('مكمل') || c.includes('حديد') || c.includes('كالسيوم') || c.includes('فوليك');
+                    if (currentCategoryFilter === 'derm') return c.includes('جلد') || c.includes('عين') || c.includes('مسالك') || c.includes('بروستاتا') || c.includes('حب الشباب');
+                    return true;
+                });
+            }
+
+            // تصفية الرصيد
+            if (currentStockFilter !== 'all') {
+                list = list.filter(m => {
+                    const s = parseInt(m.stock_quantity || 0);
+                    if (currentStockFilter === 'safe') return s > 30;
+                    if (currentStockFilter === 'low') return s >= 16 && s <= 30;
+                    if (currentStockFilter === 'critical') return s <= 15;
+                    return true;
+                });
+            }
+
+            renderTable(list);
+        }
+
+        function renderTable(list) {
+            const tbody = document.getElementById('medicineTableBody');
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-muted);">لا توجد أصناف مطابقة لخيارات الفلترة الحالية.</td></tr>';
+                return;
+            }
+            const role = AppAuth.getNormalizedRole();
+            const canManage = (role === 'supervisor');
+
+            tbody.innerHTML = list.map(m => {
+                const stock = parseInt(m.stock_quantity || 0);
+                let stockBadge = `<span class="badge badge-success" style="font-weight:800;">${stock} علبة</span>`;
+                let healthText = `<span style="color: var(--success); font-weight:700; font-size:0.8rem;">مستقر</span>`;
+
+                if (stock <= 15) {
+                    stockBadge = `<span class="badge badge-danger" style="font-weight:800;">${stock} علبة</span>`;
+                    healthText = `<span style="color: var(--danger); font-weight:800; font-size:0.8rem;">حرج جداً</span>`;
+                } else if (stock <= 30) {
+                    stockBadge = `<span class="badge badge-warning" style="font-weight:800;">${stock} علبة</span>`;
+                    healthText = `<span style="color: var(--warning); font-weight:700; font-size:0.8rem;">قريب لإعادة الطلب</span>`;
+                }
+
+                return `
+                    <tr>
+                        <td style="font-weight: 700; color: var(--text-muted);">#${m.id}</td>
+                        <td>
+                            <strong style="color: var(--text-main); font-size: 0.94rem;">${m.name}</strong>
+                        </td>
+                        <td><code style="font-size: 0.82rem;">${m.generic_name || '-'}</code></td>
+                        <td><span style="font-size: 0.84rem; color: var(--text-muted);">${m.category || 'عام'}</span></td>
+                        <td><strong style="color: var(--primary); font-size: 0.95rem;">${parseFloat(m.price).toFixed(2)}</strong> ريال</td>
+                        <td>${stockBadge}</td>
+                        <td style="font-size: 0.86rem; color: var(--text-muted);">${m.expiry_date ? String(m.expiry_date).substring(0, 10) : '-'}</td>
+                        <td>${healthText}</td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 0.35rem; align-items: center;">
+                                <a href="order_create.html?med_id=${m.id}" class="btn btn-pos" style="padding: 0.2rem 0.55rem; font-size: 0.76rem; border-radius: var(--radius-sm);" title="صرف فوري في نقطة البيع">+ صرف</a>
+                                ${canManage ? `<a href="medicine_form.html?id=${m.id}" class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.76rem; border-radius: var(--radius-sm);" title="تعديل بيانات الدواء">تعديل</a>` : `<button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.76rem; color: var(--primary); border-color: var(--primary); border-radius: var(--radius-sm);" onclick="requestMedicineSupply('${m.name.replace(/'/g, "\\\\'")}')" title="طلب توفير كمية من مدير الصيدلية">+ طلب توفير</button>`}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function requestMedicineSupply(medName) {
+            window.location.href = `orders.html?action=request&med=${encodeURIComponent(medName)}`;
+        }
+
+        async function performSmartSearch() {
+            const input = document.getElementById('searchInput');
+            const q = (input ? input.value : '').trim();
+            const list = (allMedicines && allMedicines.length > 0) ? allMedicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
+            
+            if (!q) {
+                renderTable(list);
+                return;
+            }
+
+            try {
+                const res = await AIEngine.smartSearch(q, list);
+                if (res && res.data && res.data.length > 0) {
+                    renderTable(res.data);
+                    return;
+                }
+            } catch (err) {}
+
+            // Fallback direct fuzzy search
+            const results = list.map(m => {
+                const nameScore = AIEngine.calculateArabicSimilarity(q, m.name || '');
+                const genScore = AIEngine.calculateArabicSimilarity(q, m.generic_name || '');
+                const catScore = AIEngine.calculateArabicSimilarity(q, m.category || '');
+                const maxScore = Math.max(nameScore * 1.0, genScore * 0.95, catScore * 0.70);
+                return { ...m, relevance_score: Math.round(Math.min(maxScore, 1.0) * 1000) / 1000 };
+            }).filter(m => m.relevance_score >= 0.40).sort((a, b) => b.relevance_score - a.relevance_score);
+
+            if (results.length > 0) {
+                renderTable(results);
+            } else {
+                const tbody = document.getElementById('medicineTableBody');
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                        <div style="font-weight: 800; font-size: 1.05rem; color: var(--text-main); margin-bottom: 0.35rem;">لم يتم العثور على أدوية مطابقة للاستعلام "${escapeXml(q)}"</div>
+                        <div style="font-size: 0.85rem;">جرب البحث بكلمات أخرى أو بجزء من الاسم العلمي أو التجاري.</div>
+                    </td></tr>`;
+                }
+            }
+        }
+
+        function downloadXmlFormat() {
+            let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<medicines>\n';
+            allMedicines.forEach(m => {
+                xml += `  <medicine id="${m.id}">\n`;
+                xml += `    <name>${escapeXml(m.name)}</name>\n`;
+                xml += `    <generic_name>${escapeXml(m.generic_name || '')}</generic_name>\n`;
+                xml += `    <category>${escapeXml(m.category || '')}</category>\n`;
+                xml += `    <price>${m.price}</price>\n`;
+                xml += `    <stock>${m.stock_quantity}</stock>\n`;
+                xml += `    <expiry>${m.expiry_date || ''}</expiry>\n`;
+                xml += `  </medicine>\n`;
+            });
+            xml += '</medicines>';
+
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'medicines_inventory.xml';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function escapeXml(unsafe) {
+            return String(unsafe).replace(/[<>&'"]/g, c => {
+                switch (c) {
+                    case '<': return '&lt;';
+                    case '>': return '&gt;';
+                    case '&': return '&amp;';
+                    case '\'': return '&apos;';
+                    case '"': return '&quot;';
+                }
+            });
+        }
+
+        window.addEventListener('storage', () => {
+            loadMedicines();
+        });
+        window.addEventListener('spms_stock_updated', () => {
+            loadMedicines();
+        });
+    </script>
+</body>
+</html>

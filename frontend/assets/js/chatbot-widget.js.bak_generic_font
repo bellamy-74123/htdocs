@@ -1,0 +1,343 @@
+// -*- coding: utf-8 -*-
+/**
+ * سكريبت الويدجت العائم للشات بوت الذكي (Smart Pharmacy Chatbot Widget)
+ * يتم تضمينه تلقائياً في كافة صفحات النظام لتقديم المساعدة الفورية.
+ */
+
+(function initChatbotWidget() {
+    // منع التكرار أو التشغيل داخل صفحة الشات الكاملة نفسها
+    if (window.location.pathname.endsWith('chat.html')) return;
+    if (document.getElementById('spmsChatFab')) return;
+
+    // حقن CSS إذا لم يكن مضمناً
+    if (!document.querySelector('link[href*="chatbot-widget.css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        link.href = isSubpage ? '../assets/css/chatbot-widget.css' : 'assets/css/chatbot-widget.css';
+        document.head.appendChild(link);
+    }
+
+    // بناء عناصر الـ HTML للويدجت
+    const widgetContainer = document.createElement('div');
+    widgetContainer.innerHTML = `
+        <!-- Floating Action Button -->
+        <button id="spmsChatFab" class="spms-chat-fab" title="المساعد الدوائي الذكي">
+            <svg viewBox="0 0 24 24">
+                <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+            </svg>
+        </button>
+
+        <!-- Popup Chat Modal -->
+        <div id="spmsChatModal" class="spms-chat-modal">
+            <div class="spms-chat-modal-header">
+                <div>
+                    <h4>المساعد الدوائي الذكي</h4>
+                    <p>استفسار فوري ومقارنة أسعار وبدائل</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <a id="spmsChatExpandLink" href="#" style="color: #fff; text-decoration: none; font-size: 0.8rem; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 4px;" title="فتح في صفحة كاملة">تكبير</a>
+                    <button id="spmsChatClose" class="spms-chat-close-btn">&times;</button>
+                </div>
+            </div>
+
+            <div id="spmsChatBody" class="spms-chat-body">
+                <div class="spms-widget-msg bot">
+                    <div class="spms-widget-bubble">
+                        <strong>المساعد الدوائي الذكي</strong><br>
+                        مرحباً بك. المساعد متصل مباشرة بقاعدة بيانات الصيدلية للإجابة عن أسعار الأدوية وتوفر المخزون والبدائل المتاحة.
+                    </div>
+                </div>
+            </div>
+
+            <form id="spmsWidgetForm" class="spms-widget-footer">
+                <input type="text" id="spmsWidgetInput" placeholder="اكتب استفسارك الدوائي..." autocomplete="off" required>
+                <button type="submit">إرسال</button>
+            </form>
+        </div>
+    `;
+
+    document.body.appendChild(widgetContainer);
+
+    // ربط الأحداث التفاعلية
+    const fab = document.getElementById('spmsChatFab');
+    const modal = document.getElementById('spmsChatModal');
+    const closeBtn = document.getElementById('spmsChatClose');
+    const form = document.getElementById('spmsWidgetForm');
+    const input = document.getElementById('spmsWidgetInput');
+    const chatBody = document.getElementById('spmsChatBody');
+    const expandLink = document.getElementById('spmsChatExpandLink');
+
+    const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+    expandLink.href = isSubpage ? 'chat.html' : 'pages/chat.html';
+
+    let isOpen = false;
+    let widgetHistory = [];
+    let liveDbMeds = [];
+
+    async function fetchWidgetDatabase() {
+        try {
+            if (typeof APIClient !== 'undefined') {
+                const res = await APIClient.request('medicines.php');
+                if (res && res.success && res.data && res.data.length > 0) {
+                    liveDbMeds = res.data;
+                    return liveDbMeds;
+                }
+            }
+        } catch (e) {}
+        if (typeof DEMO_MEDICINES !== 'undefined') {
+            liveDbMeds = DEMO_MEDICINES;
+        }
+        return liveDbMeds;
+    }
+
+    fetchWidgetDatabase();
+
+    function toggleChat(open = !isOpen) {
+        isOpen = open;
+        modal.style.display = isOpen ? 'flex' : 'none';
+        if (isOpen) {
+            input.focus();
+            chatBody.scrollTop = chatBody.scrollHeight;
+            fetchWidgetDatabase();
+        }
+    }
+
+    fab.addEventListener('click', () => toggleChat());
+    closeBtn.addEventListener('click', () => toggleChat(false));
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+
+        // إضافة رسالة المستخدم
+        appendWidgetMsg('user', text);
+        input.value = '';
+        widgetHistory.push({ role: 'user', content: text });
+
+        // إضافة رسالة جاري المعالجة
+        const loadingId = 'loading-' + Date.now();
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = loadingId;
+        loadingDiv.className = 'spms-widget-msg bot';
+        loadingDiv.innerHTML = `<div class="spms-widget-bubble" style="color: #64748b; font-style: italic;">جاري الاستعلام من قاعدة البيانات...</div>`;
+        chatBody.appendChild(loadingDiv);
+        chatBody.scrollTop = chatBody.scrollHeight;
+
+        try {
+            const currentMeds = await fetchWidgetDatabase();
+            let resData = null;
+
+            // 1. الاتصال المباشر بمحرك بايثون FastAPI
+            if (!resData) {
+                try {
+                    const pyRes = await fetch('http://127.0.0.1:8000/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: text, medicines: currentMeds, history: widgetHistory })
+                    });
+                    if (pyRes.ok) {
+                        const pyJ = await pyRes.json();
+                        if (pyJ.success && pyJ.data) {
+                            resData = pyJ.data;
+                        }
+                    }
+                } catch (pyErr) {
+                    console.warn('FastAPI direct call failed, trying PHP backend...');
+                }
+            }
+
+            // 2. الاتصال عبر وسيط PHP إذا لزم الأمر
+            if (!resData) {
+                const candidatePaths = [
+                    'http://localhost:8080/api/chatbot.php',
+                    isSubpage ? '../../backend/api/chatbot.php' : '../backend/api/chatbot.php',
+                    isSubpage ? '../backend/api/chatbot.php' : 'backend/api/chatbot.php'
+                ];
+                for (const apiPath of candidatePaths) {
+                    try {
+                        const res = await fetch(apiPath, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ message: text, medicines: currentMeds, history: widgetHistory })
+                        });
+                        if (res.ok) {
+                            const j = await res.json();
+                            if (j.success && j.data) {
+                                resData = j.data;
+                                break;
+                            }
+                        }
+                    } catch (phpErr) {}
+                }
+            }
+
+            // 3. محرك الاستجابة المباشر على بيانات قاعدة البيانات الحية
+            if (!resData) {
+                resData = queryWidgetDatabase(text, currentMeds);
+            }
+
+            const loader = document.getElementById(loadingId);
+            if (loader) loader.remove();
+
+            if (resData && resData.reply) {
+                appendWidgetMsg('bot', formatText(resData.reply));
+                widgetHistory.push({ role: 'assistant', content: resData.reply });
+            } else {
+                appendWidgetMsg('bot', 'تمت المعالجة بنجاح.');
+            }
+        } catch (err) {
+            const loader = document.getElementById(loadingId);
+            if (loader) loader.remove();
+            appendWidgetMsg('bot', 'تعذر الاتصال بقاعدة البيانات أو محرك الذكاء الاصطناعي حالياً.');
+        }
+
+        chatBody.scrollTop = chatBody.scrollHeight;
+    });
+
+    
+    window.addMedToCartFromBot = function(medId, medName) {
+        if (typeof addItemToInvoice === 'function' && typeof availableMeds !== 'undefined') {
+            const sel = document.getElementById('medSelect');
+            if (sel) {
+                sel.value = medId;
+                if (typeof updateMedSelectionInfo === 'function') updateMedSelectionInfo();
+                addItemToInvoice();
+                if (typeof showNotification === 'function') {
+                    showNotification(`تمت إضافة [${medName}] للفاتورة مباشرة بنجاح!`, 'success');
+                }
+                return;
+            }
+        }
+        const isSub = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const url = isSub ? `order_create.html?med_id=${medId}&auto_add=1` : `pages/order_create.html?med_id=${medId}&auto_add=1`;
+        window.location.href = url;
+    };
+
+    function renderWidgetMedCard(m, isBest = false) {
+        const isSub = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const posUrl = isSub ? `order_create.html?med_id=${m.id}&auto_add=1` : `pages/order_create.html?med_id=${m.id}&auto_add=1`;
+        const reqUrl = isSub ? `orders.html?action=request&med=${encodeURIComponent(m.name)}` : `pages/orders.html?action=request&med=${encodeURIComponent(m.name)}`;
+        const stock = m.stock_quantity !== undefined ? m.stock_quantity : 0;
+        const bestTag = isBest ? '<span class="badge badge-success" style="font-size:0.72rem; padding: 2px 6px; margin-inline-start: 4px;">الخيار الأوفر</span>' : '';
+
+        return `
+            <div class="spms-med-order-card">
+                <div style="flex: 1; min-width: 170px;">
+                    <strong style="color: var(--primary, #0284c7); font-size: 0.86rem;">${m.name}</strong> ${bestTag}
+                    <div style="font-size: 0.74rem; color: var(--text-muted, #64748b); margin-top: 2px;">
+                        المادة: <code>${m.generic_name || '-'}</code> | السعر: <strong>${parseFloat(m.price || 0).toFixed(2)} ريال</strong> | الرصيد: <strong>${stock} علبة</strong>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <a href="${posUrl}" onclick="window.addMedToCartFromBot(${m.id}, '${m.name}'); return false;" class="spms-med-order-btn-pos">
+                        + صرف بالفاتورة
+                    </a>
+                    <a href="${reqUrl}" class="spms-med-order-btn-req">
+                        طلب توفير
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    function queryWidgetDatabase(query, medicines) {
+        const q = (query || '').toLowerCase().trim();
+        const meds = (medicines && medicines.length > 0) ? medicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
+
+        if (q.includes('مرحبا') || q.includes('اهلا') || q.includes('السلام') || q.includes('هلا')) {
+            return { reply: "أهلاً بك. المساعد متصل مباشرة بقاعدة بيانات الصيدلية للبحث عن الأسعار، توفر المخزون، والبدائل المتكافئة." };
+        }
+
+        let found = meds.find(m => {
+            const n = (m.name || '').toLowerCase();
+            const g = (m.generic_name || '').toLowerCase();
+            return n.includes(q) || g.includes(q);
+        });
+
+        if (!found) {
+            const words = q.split(' ').filter(w => w.length >= 3);
+            for (const w of words) {
+                found = meds.find(m => {
+                    const n = (m.name || '').toLowerCase();
+                    const g = (m.generic_name || '').toLowerCase();
+                    return n.includes(w) || g.includes(w);
+                });
+                if (found) break;
+            }
+        }
+
+        if (found) {
+            const alts = meds.filter(m => m.id !== found.id && m.generic_name && found.generic_name && m.generic_name.toLowerCase() === found.generic_name.toLowerCase()).sort((a, b) => a.price - b.price);
+            let reply = `### نتيجة البحث: **${found.name}**\n`;
+            reply += renderWidgetMedCard(found);
+
+            if (alts.length > 0) {
+                reply += `\n#### البدائل المتكافئة المسجلة بالصيدلية (مرتبة حسب السعر):\n`;
+                alts.forEach((alt, idx) => {
+                    reply += renderWidgetMedCard(alt, idx === 0 && alt.price < found.price);
+                });
+            }
+            return { reply: reply };
+        }
+
+        // فحص الأعراض السريرية الشائعة
+        const symptomRules = [
+            { keywords: ['صداع', 'راس', 'رأس', 'شقيقة', 'شقيقه', 'مصدع'], title: 'الصداع والصداع النصفي', generics: ['باراسيتامول', 'إيبوبروفين', 'ديكلوفيناك'], advice: 'تناول قرص باراسيتامول أو بنادول إكسترا بعد الأكل مع شرب الماء.' },
+            { keywords: ['حرارة', 'حراره', 'سخونة', 'سخونه', 'حمى', 'حمي', 'مكسر'], title: 'الحمى وارتفاع الحرارة', generics: ['باراسيتامول', 'إيبوبروفين'], advice: 'تناول الباراسيتامول كل 6-8 ساعات مع كمادات ماء فاتر وسوائل بكثرة.' },
+            { keywords: ['حموضة', 'حموضه', 'حرقان', 'ارتجاع', 'قرحة', 'معدة'], title: 'حموضة وحرقة المعدة', generics: ['أوميبرازول', 'بانتوبرازول'], advice: 'تناول كبسولة أوميبرازول 20 مجم صباحاً قبل الإفطار بنصف ساعة.' },
+            { keywords: ['كحة', 'كحه', 'سعال', 'بلغم', 'رشح', 'زكام', 'حلق'], title: 'السعال والرشح والتهاب الحلق', generics: ['باراسيتامول', 'أزيثرومايسين', 'أموكسيسيلين', 'سيتريزين'], advice: 'تناول الباراسيتامول لتسكين الحلق والحرارة ومضادات الهيستامين للرشح.' },
+            { keywords: ['مفاصل', 'ركبة', 'ركبه', 'روماتيزم', 'عظام', 'ظهر', 'خشونة'], title: 'آلام المفاصل والفقرات', generics: ['سيليكوكسيب', 'ديكلوفيناك', 'ميلوكسيكام', 'إيبوبروفين'], advice: 'استخدام مضاد التهاب مثل سيلبركس أو فولتارين بعد الوجبات مباشرة.' },
+            { keywords: ['اسنان', 'أسنان', 'ضرس', 'لثة', 'خراج'], title: 'ألم الأسنان والتهاب اللثة', generics: ['ديكلوفيناك', 'إيبوبروفين', 'أموكسيسيلين + كلافولانات'], advice: 'تناول مسكن سريع مثل كتافلام أو بروفين بعد الأكل مع زيارة طبيب الأسنان.' }
+        ];
+
+        for (const rule of symptomRules) {
+            if (rule.keywords.some(k => q.includes(k))) {
+                const matched = meds.filter(m => {
+                    const gen = (m.generic_name || '').toLowerCase();
+                    const nm = (m.name || '').toLowerCase();
+                    return rule.generics.some(g => gen.includes(g) || nm.includes(g));
+                }).sort((a, b) => (b.stock_quantity > 0 ? 0 : 1) - (a.stock_quantity > 0 ? 0 : 1) || (a.price - b.price));
+
+                if (matched.length > 0) {
+                    let reply = `### التقييم السريري: **${rule.title}**\n\n`;
+                    reply += `#### الأدوية الموصى بها المتوفرة بالمخزن:\n`;
+                    matched.slice(0, 4).forEach((m, idx) => {
+                        reply += renderWidgetMedCard(m, idx === 0);
+                    });
+                    reply += `\n#### إرشادات الاستخدام والجرعات الآمنة:\n${rule.advice}\n`;
+                    return { reply: reply };
+                }
+            }
+        }
+
+        return { reply: "لم أتمكن من العثور على الدواء المطلوب في قاعدة البيانات. يمكنك سؤالي عن أعراض المريض (مثل: 'دواء للصداع'، 'علاج لحموضة المعدة') أو كتابة اسم الدواء بوضوح." };
+    }
+
+    function appendWidgetMsg(sender, htmlContent) {
+        const d = document.createElement('div');
+        d.className = `spms-widget-msg ${sender}`;
+        d.innerHTML = `<div class="spms-widget-bubble">${htmlContent}</div>`;
+        chatBody.appendChild(d);
+        chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    function stripWidgetEmojis(str) {
+        if (!str) return '';
+        return str.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{26A0}\u{FE0F}]/gu, '')
+                  .replace(/[📋💊⭐️💡⚠️🩺⭐🚨✅❌]/g, '');
+    }
+
+    function formatText(t) {
+        if (!t) return '';
+        let html = stripWidgetEmojis(t)
+            .replace(/### (.*)/g, '<strong style="color: var(--primary, #0284c7); display:block; margin-bottom:6px; font-size: 0.88rem; font-weight: 800;">$1</strong>')
+            .replace(/#### (.*)/g, '<strong style="color: var(--text-main); display:block; margin:8px 0 4px 0; font-size: 0.86rem; border-bottom: 1px solid var(--border); padding-bottom: 3px;">$1</strong>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--text-main);">$1</strong>')
+            .replace(/`([^`]+)`/g, '<code style="background: var(--bg-main); color: var(--accent, #0ea5e9); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-size: 0.85em;">$1</code>')
+            .replace(/
+/g, '<br>');
+
+        return html;
+    }})();

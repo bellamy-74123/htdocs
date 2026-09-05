@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>دليل المخزون الدوائي المعتمد | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+    <style>
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            padding: 1rem;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            width: 100%;
+            max-width: 650px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            padding: 1.5rem;
+        }
+        .online-verify-card {
+            background: var(--bg-hover);
+            border: 2px dashed var(--primary);
+            border-radius: var(--radius);
+            padding: 1.1rem;
+            margin-bottom: 1.25rem;
+        }
+        .online-verify-card.success {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.06);
+        }
+        .online-verify-card.failed {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.06);
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            padding: 0.28rem 0.75rem;
+            border-radius: var(--radius-sm) !important;
+            line-height: 1.3;
+            white-space: nowrap;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+        .status-badge.verified {
+            color: var(--success);
+            background: var(--success-bg);
+            border: 1px solid rgba(5, 150, 105, 0.25);
+        }
+        .status-badge.pending {
+            color: var(--warning);
+            background: var(--warning-bg);
+            border: 1px solid rgba(217, 119, 6, 0.25);
+        }
+        .pulse-live {
+            width: 6px;
+            height: 6px;
+            background: currentColor;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <!-- Master Inventory Formulary Header -->
+        <div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
+            <div class="card-header" style="margin-bottom: 1rem;">
+                <div>
+                    <h2 style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0;">دليل المخزون الدوائي المعتمد (Master Formulary)</h2>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">سجل الأسماء والمعلومات الدوائية الرسمية المعتمدة. (الكميات والأرصدة والأسعار تتم إدارتها عبر قسم الأدوية).</p>
+                </div>
+                <div id="formularyHeaderActions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Injected by JS based on user role -->
+                </div>
+            </div>
+
+            <!-- Formulary Summary Cards -->
+            <div class="kpi-grid" style="margin-bottom: 1.25rem;">
+                <div class="kpi-card kpi-primary">
+                    <div class="kpi-title">إجمالي الأصناف المعتمدة بالمخزون</div>
+                    <div class="kpi-value" id="formularyTotalCount">121 دواء</div>
+                    <div class="kpi-sub" style="color: var(--primary);">موثقة سريرياً ومعتمدة</div>
+                </div>
+                <div class="kpi-card kpi-success">
+                    <div class="kpi-title">المجموعات العلاجية المغطاة</div>
+                    <div class="kpi-value" style="color: var(--success);">10 أجهزة حيوية</div>
+                    <div class="kpi-sub" style="color: var(--text-muted);">تصنيف فارماكولوجي شامل</div>
+                </div>
+                <div class="kpi-card kpi-warning">
+                    <div class="kpi-title">التحقق السحابي المباشر</div>
+                    <div class="kpi-value" style="color: var(--warning); font-size: 1.35rem;">التحقق والاعتماد السريري الفوري</div>
+                    <div class="kpi-sub" style="color: var(--text-muted);">منع أي أسماء غير حقيقية</div>
+                </div>
+            </div>
+
+            <!-- Search and Filter Bar -->
+            <div style="display: flex; gap: 0.6rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                <input type="text" id="formularySearchInput" class="form-control" style="flex: 2; min-width: 260px; font-weight: 600;" placeholder="بحث في دليل المخزون بالاسم التجاري، العلمي، أو دواعي الاستعمال..." oninput="filterFormulary()">
+                <select id="formularyCategoryFilter" class="form-control" style="flex: 1.2; min-width: 200px; font-weight: 700;" onchange="filterFormulary()">
+                    <option value="all">كافة المجموعات العلاجية (10 مجموعات)</option>
+                    <option value="gastro">أدوية الجهاز الهضمي والمعدة</option>
+                    <option value="analgesic">مسكنات وخافضات حرارة</option>
+                    <option value="nsaid">مضادات التهاب ومفاصل</option>
+                    <option value="cardio">أدوية القلب وضغط الدم والدهون</option>
+                    <option value="diabetes">أدوية السكري والغدد الصماء</option>
+                    <option value="respiratory">أدوية الجهاز التنفسي والربو</option>
+                    <option value="antibiotic">مضادات حيوية وميكروبية</option>
+                    <option value="cns">أدوية الجهاز العصبي والنفسية</option>
+                    <option value="vitamins">الفيتامينات والمكملات الغذائية</option>
+                    <option value="derm">أدوية الجلدية والعيون والمسالك</option>
+                </select>
+                <button class="btn btn-secondary" onclick="resetFormularyFilters()">إعادة ضبط</button>
+            </div>
+
+            <!-- Formulary Table (Only Names & Drug Information) -->
+            <div style="overflow-x: auto;">
+                <table style="margin-top: 0.5rem;">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>الصنف التجاري المعتمد</th>
+                            <th>الاسم العلمي (المادة الفعالة)</th>
+                            <th>المجموعة العلاجية والتصنيف</th>
+                            <th>دواعي الاستعمال السريرية</th>
+                            <th>الشكل الصيدلاني</th>
+                            <th style="text-align: center; min-width: 130px;">حالة الاعتماد</th>
+                            <th style="text-align: center; min-width: 140px;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="formularyTableBody">
+                        <tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">جاري تحميل دليل المخزون الدوائي المعتمد...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL: Add Drug to Formulary with STRICT Online Web Verification          -->
+    <!-- ========================================================================= -->
+    <div id="addDrugModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">إضافة دواء جديد لدليل المخزون المعتمد</h3>
+                    <span style="font-size: 0.78rem; color: var(--text-muted);">التحقق السحابي الإلزامي: يُمنع إضافة أي اسم غير حقيقي أو عشوائي</span>
+                </div>
+                <button onclick="closeModal('addDrugModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+
+            <!-- Online Verification Box -->
+            <div class="online-verify-card" id="verifyBox">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span style="font-size: 0.88rem; font-weight: 800; color: var(--primary);">1. التحقق المباشر من صحة ووجود الدواء في النت:</span>
+                    <span id="verifyLiveIndicator" style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; font-weight: 700; color: #059669;">
+                        <span class="pulse-live"></span> فحص السجلات الطبية المعتمدة
+                    </span>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="verifyInputQuery" class="form-control" placeholder="اكتب اسم الدواء للتحقق منه (مثال: Concor, Paracetamol, Atorvastatin)..." style="flex: 1; font-weight: 700;" onkeydown="if(event.key==='Enter'){event.preventDefault();performOnlineVerification();}">
+                    <button type="button" class="btn" style="padding: 0.45rem 1.1rem; font-weight: 800; white-space: nowrap;" onclick="performOnlineVerification()">فحص بالنت</button>
+                </div>
+                <div id="verifyFeedback" style="margin-top: 0.65rem; font-size: 0.82rem; display: none;"></div>
+            </div>
+
+            <form onsubmit="handleFormularySubmit(event)">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الاسم التجاري المعتمد</label>
+                        <input type="text" id="formDrugName" class="form-control" placeholder="يتم تعبئته تلقائياً بعد التحقق" required readonly style="background: var(--bg-hover); font-weight: 700;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المادة الفعالة (الاسم العلمي المؤكد)</label>
+                        <input type="text" id="formGenericName" class="form-control" placeholder="المادة الفعالة الموثقة" required readonly style="background: var(--bg-hover);">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المجموعة العلاجية</label>
+                        <input type="text" id="formDrugClass" class="form-control" placeholder="التصنيف الدوائي المعتمد" required readonly style="background: var(--bg-hover);">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الشكل الصيدلاني والتركيز</label>
+                        <input type="text" id="formDosageForm" class="form-control" value="أقراص فموية (Oral Tablets)" required>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">دواعي الاستعمال السريرية</label>
+                    <textarea id="formIndications" class="form-control" rows="2" placeholder="دواعي الاستخدام المعتمدة رسمياً..." required></textarea>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addDrugModal')">إلغاء</button>
+                    <button type="submit" id="btnSubmitFormulary" class="btn btn-pos" style="padding: 0.55rem 1.4rem; font-weight: 800;" disabled>
+                        إضافة الدواء للمخزون (يتطلب التحقق أولاً)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- MODAL: Edit Drug Information in Formulary (Pharmacy Manager)              -->
+    <!-- ========================================================================= -->
+    <div id="editDrugModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">تعديل معلومات الصنف في دليل المخزون المعتمد</h3>
+                <button onclick="closeModal('editDrugModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <form onsubmit="handleEditDrugSubmit(event)">
+                <input type="hidden" id="editDrugId">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الاسم التجاري المعتمد</label>
+                        <input type="text" id="editDrugName" class="form-control" required style="font-weight: 700;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المادة الفعالة (الاسم العلمي)</label>
+                        <input type="text" id="editDrugGeneric" class="form-control" required>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المجموعة العلاجية والتصنيف</label>
+                        <select id="editDrugCategory" class="form-control" required>
+                            <option value="أدوية الجهاز الهضمي والمعدة">أدوية الجهاز الهضمي والمعدة</option>
+                            <option value="مسكنات وخافضات حرارة">مسكنات وخافضات حرارة</option>
+                            <option value="مسكنات ومضادات التهاب">مسكنات ومضادات التهاب</option>
+                            <option value="أدوية القلب وضغط الدم والدهون">أدوية القلب وضغط الدم والدهون</option>
+                            <option value="أدوية السكري والغدد الصماء">أدوية السكري والغدد الصماء</option>
+                            <option value="أدوية الجهاز التنفسي والربو">أدوية الجهاز التنفسي والربو</option>
+                            <option value="مضادات حيوية وميكروبية">مضادات حيوية وميكروبية</option>
+                            <option value="أدوية الجهاز العصبي والنفسية">أدوية الجهاز العصبي والنفسية</option>
+                            <option value="الفيتامينات والمكملات الغذائية">الفيتامينات والمكملات الغذائية</option>
+                            <option value="أدوية الجلدية والعيون والمسالك">أدوية الجلدية والعيون والمسالك</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الشكل الصيدلاني والتركيز</label>
+                        <input type="text" id="editDrugDosageForm" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">دواعي الاستعمال السريرية المعتمدة</label>
+                    <textarea id="editDrugIndications" class="form-control" rows="2" required></textarea>
+                </div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('editDrugModal')">إلغاء</button>
+                    <button type="submit" class="btn btn-pos" style="padding: 0.55rem 1.4rem; font-weight: 800;">حفظ التعديلات في المخزون</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        let formularyList = [];
+        let isDrugVerified = false;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // حماية صفحة المخزون: مقتصرة على مدير الصيدلية فقط (الكاشير مخصص له الصرف والفواتير)
+            if (!AppAuth.requireAuth(['supervisor'])) {
+                return;
+            }
+            loadFormularyData();
+            renderHeaderActions();
+        });
+
+        function renderHeaderActions() {
+            const role = AppAuth.getNormalizedRole() || 'staff';
+            const container = document.getElementById('formularyHeaderActions');
+            if (!container) return;
+
+            let html = '';
+            if (role === 'supervisor') {
+                html += `
+                    <button class="btn btn-pos" onclick="openAddDrugModal()" style="font-weight: 800;">
+                        + إضافة دواء جديد للمخزون (تحقق بالنت)
+                    </button>
+                `;
+            }
+            html += `
+                <a href="medicines.html" class="btn btn-secondary" style="font-weight: 700;">
+                    الانتقال لقسم الأدوية (الأرصدة والكميات)
+                </a>
+            `;
+            container.innerHTML = html;
+        }
+
+        function loadFormularyData() {
+            if (typeof MASTER_FORMULARY !== 'undefined' && Array.isArray(MASTER_FORMULARY)) {
+                formularyList = [...MASTER_FORMULARY];
+            } else if (typeof DEMO_MEDICINES !== 'undefined' && Array.isArray(DEMO_MEDICINES)) {
+                formularyList = DEMO_MEDICINES.map(m => ({
+                    id: m.id,
+                    name: m.name,
+                    generic_name: m.generic_name,
+                    category: m.category,
+                    indications: m.description || m.indications || 'علاج سريري دوائي معتمد وموثق',
+                    dosage_form: m.dosage_form || 'أقراص / كبسولات',
+                    verified: true
+                }));
+            }
+            document.getElementById('formularyTotalCount').textContent = `${formularyList.length} دواء`;
+            renderFormularyTable(formularyList);
+        }
+
+        function renderFormularyTable(list) {
+            const tbody = document.getElementById('formularyTableBody');
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">لا توجد أدوية مطابقة للبحث في دليل المخزون.</td></tr>';
+                return;
+            }
+
+            const role = AppAuth.getNormalizedRole() || 'staff';
+
+            tbody.innerHTML = list.map(d => {
+                let actionsHtml = '';
+                if (role === 'supervisor') {
+                    actionsHtml = `
+                        <button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem;" onclick="openEditDrugModal(${d.id})" title="تعديل معلومات الدواء">تعديل</button>
+                        <button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.75rem; color: var(--danger); border-color: rgba(220,38,38,0.3);" onclick="deleteFormularyDrug(${d.id})" title="حذف الدواء من دليل المخزون">حذف</button>
+                    `;
+                } else {
+                    actionsHtml = `<span style="font-size: 0.78rem; color: var(--text-muted);">معتمد للاستخدام</span>`;
+                }
+
+                return `
+                    <tr>
+                        <td style="font-weight: 700; color: var(--text-muted);">#${d.id}</td>
+                        <td>
+                            <strong style="color: var(--text-main); font-size: 0.94rem;">${d.name}</strong>
+                        </td>
+                        <td><span class="generic-name" style="font-family: 'Times New Roman', Times, 'Simplified Arabic', serif; font-size: 0.9rem; color: var(--text-muted); font-style: italic;">${d.generic_name}</span></td>
+                        <td><span style="font-size: 0.83rem; color: var(--text-muted); font-weight: 600;">${d.category}</span></td>
+                        <td style="font-size: 0.83rem; max-width: 260px;">${d.indications || 'علاج سريري معتمد'}</td>
+                        <td style="font-size: 0.8rem; color: var(--text-muted);">${d.dosage_form || 'أقراص فموية'}</td>
+                        <td style="text-align: center;"><span class="status-badge verified"><span class="pulse-live"></span> موثق ومعتمد</span></td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 0.3rem; align-items: center; justify-content: center;">
+                                ${actionsHtml}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // =========================================================================
+        // STRICT ONLINE VERIFICATION GUARDRAIL
+        // =========================================================================
+        function openAddDrugModal() {
+            isDrugVerified = false;
+            document.getElementById('verifyInputQuery').value = '';
+            document.getElementById('verifyFeedback').style.display = 'none';
+            document.getElementById('verifyBox').className = 'online-verify-card';
+            document.getElementById('formDrugName').value = '';
+            document.getElementById('formGenericName').value = '';
+            document.getElementById('formDrugClass').value = '';
+            document.getElementById('formIndications').value = '';
+            document.getElementById('btnSubmitFormulary').disabled = true;
+            document.getElementById('btnSubmitFormulary').textContent = 'إضافة الدواء للمخزون (يتطلب التحقق أولاً)';
+            document.getElementById('addDrugModal').classList.add('active');
+        }
+
+        async function performOnlineVerification() {
+            const q = document.getElementById('verifyInputQuery').value.trim();
+            const feedback = document.getElementById('verifyFeedback');
+            const box = document.getElementById('verifyBox');
+            const submitBtn = document.getElementById('btnSubmitFormulary');
+
+            if (!q || q.length < 3) {
+                showNotification('يرجى إدخال اسم دواء صالح للتحقق منه عبر النت.', 'warning');
+                return;
+            }
+
+            feedback.style.display = 'block';
+            feedback.innerHTML = '<span style="color: var(--primary); font-weight: 700;">جاري التحقق المباشر من السجلات الدوائية المعتمدة والتأكد من صحة الاسم...</span>';
+
+            // Anti-random text validation (e.g. "asdasd", "123123", "aaaaa")
+            const isRandomGibberish = /(.)\1{3,}/.test(q) || /^[^a-zA-Z؀-ۿ]+$/.test(q);
+            if (isRandomGibberish) {
+                box.className = 'online-verify-card failed';
+                feedback.innerHTML = `
+                    <div style="color: #dc2626; font-weight: 800; padding: 0.5rem; background: rgba(220,38,38,0.1); border-radius: 8px;">
+                        ❌ خطأ: الاسم المدخل "${q}" عبارة عن نص عشوائي غير معروف. يُمنع منعاً باتاً تسجيل أي أسماء وهمية بالمخزون.
+                    </div>
+                `;
+                submitBtn.disabled = true;
+                isDrugVerified = false;
+                return;
+            }
+
+            try {
+                let verifiedData = null;
+                const normQ = q.toLowerCase();
+
+                // 1. Search in Central Master Formulary (121 clinical drugs)
+                if (typeof MASTER_FORMULARY !== 'undefined') {
+                    const match = MASTER_FORMULARY.find(m => 
+                        (m.name || '').toLowerCase().includes(normQ) ||
+                        (m.generic_name || '').toLowerCase().includes(normQ) ||
+                        (m.generic_name_en || '').toLowerCase().includes(normQ)
+                    );
+                    if (match) {
+                        verifiedData = {
+                            name: match.name,
+                            generic: match.generic_name,
+                            category: match.category,
+                            indications: match.indications,
+                            dosage_form: match.dosage_form || 'أقراص فموية'
+                        };
+                    }
+                }
+
+                // 2. Search live OpenFDA Web API
+                if (!verifiedData) {
+                    try {
+                        const res = await fetch(`https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${encodeURIComponent(q)}"+openfda.brand_name:"${encodeURIComponent(q)}"&limit=1`);
+                        if (res.ok) {
+                            const json = await res.json();
+                            if (json.results && json.results.length > 0) {
+                                const r = json.results[0];
+                                const brand = r.openfda?.brand_name ? r.openfda.brand_name[0] : q;
+                                const generic = r.openfda?.generic_name ? r.openfda.generic_name[0] : q;
+                                const pharmClass = r.openfda?.pharm_class_epc ? r.openfda.pharm_class_epc[0] : 'أدوية علاجية معتمدة';
+                                verifiedData = {
+                                    name: `${brand} (${generic})`,
+                                    generic: `${generic} / ${q}`,
+                                    category: pharmClass,
+                                    indications: r.purpose ? r.purpose[0] : 'دواء علاجي معتمد سريرياً',
+                                    dosage_form: 'أقراص / كبسولات'
+                                };
+                            }
+                        }
+                    } catch (netErr) {}
+                }
+
+                // Decision: Verified or Blocked
+                if (verifiedData) {
+                    isDrugVerified = true;
+                    box.className = 'online-verify-card success';
+                    feedback.innerHTML = `
+                        <div style="color: #059669; font-weight: 800; padding: 0.5rem; background: rgba(16,185,129,0.1); border-radius: 8px;">
+                            ✓ تم التحقق بنجاح: تم تأكيد أن "${q}" دواء طبي حقيقي وموثق رسمياً. تم استخراج وتعبئة كافة البيانات بالأسفل.
+                        </div>
+                    `;
+
+                    document.getElementById('formDrugName').value = verifiedData.name;
+                    document.getElementById('formGenericName').value = verifiedData.generic;
+                    document.getElementById('formDrugClass').value = verifiedData.category;
+                    document.getElementById('formIndications').value = verifiedData.indications;
+                    document.getElementById('formDosageForm').value = verifiedData.dosage_form;
+
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'تأكيد وحفظ الدواء في المخزون المعتمد';
+                    showNotification('تم التحقق من صحة الدواء بنجاح!', 'success');
+                } else {
+                    isDrugVerified = false;
+                    box.className = 'online-verify-card failed';
+                    feedback.innerHTML = `
+                        <div style="color: #dc2626; font-weight: 800; padding: 0.5rem; background: rgba(220,38,38,0.1); border-radius: 8px;">
+                            ❌ تعذر التحقق: لم يتم العثور على دواء باسم "${q}" في السجلات الطبية. النظام يمنع إضافة أي دواء عشوائي للمخزون.
+                        </div>
+                    `;
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'إضافة الدواء للمخزون (يتطلب التحقق أولاً)';
+                }
+            } catch (err) {
+                feedback.innerHTML = `<span style="color: var(--danger);">خطأ في فحص الإنترنت: ${err.message}</span>`;
+            }
+        }
+
+        function handleFormularySubmit(e) {
+            e.preventDefault();
+            if (!isDrugVerified) {
+                showNotification('يجب فحص وتأكيد صحة الدواء عبر الإنترنت أولاً قبل إضافته للمخزون.', 'warning');
+                return;
+            }
+
+            const newId = formularyList.length > 0 ? Math.max(...formularyList.map(x => x.id || 0)) + 1 : 1;
+            const newDrug = {
+                id: newId,
+                name: document.getElementById('formDrugName').value.trim(),
+                generic_name: document.getElementById('formGenericName').value.trim(),
+                category: document.getElementById('formDrugClass').value.trim(),
+                indications: document.getElementById('formIndications').value.trim(),
+                dosage_form: document.getElementById('formDosageForm').value.trim(),
+                verified: true
+            };
+
+            formularyList.unshift(newDrug);
+            if (typeof MASTER_FORMULARY !== 'undefined') {
+                MASTER_FORMULARY.unshift(newDrug);
+            }
+
+            document.getElementById('formularyTotalCount').textContent = `${formularyList.length} دواء`;
+            renderFormularyTable(formularyList);
+            closeModal('addDrugModal');
+            showNotification(`تم تسجيل دواء [${newDrug.name}] في دليل المخزون المعتمد بنجاح!`, 'success');
+        }
+
+        
+        function openEditDrugModal(id) {
+            const drug = formularyList.find(x => x.id === id);
+            if (!drug) return;
+
+            document.getElementById('editDrugId').value = drug.id;
+            document.getElementById('editDrugName').value = drug.name || '';
+            document.getElementById('editDrugGeneric').value = drug.generic_name || '';
+            document.getElementById('editDrugDosageForm').value = drug.dosage_form || 'أقراص فموية';
+            document.getElementById('editDrugIndications').value = drug.indications || '';
+            
+            const catSelect = document.getElementById('editDrugCategory');
+            for (let opt of catSelect.options) {
+                if ((drug.category || '').includes(opt.value) || opt.value.includes(drug.category || '')) {
+                    catSelect.value = opt.value;
+                    break;
+                }
+            }
+
+            document.getElementById('editDrugModal').classList.add('active');
+        }
+
+        function handleEditDrugSubmit(e) {
+            e.preventDefault();
+            const id = parseInt(document.getElementById('editDrugId').value);
+            const idx = formularyList.findIndex(x => x.id === id);
+
+            if (idx !== -1) {
+                formularyList[idx].name = document.getElementById('editDrugName').value.trim();
+                formularyList[idx].generic_name = document.getElementById('editDrugGeneric').value.trim();
+                formularyList[idx].category = document.getElementById('editDrugCategory').value;
+                formularyList[idx].dosage_form = document.getElementById('editDrugDosageForm').value.trim();
+                formularyList[idx].indications = document.getElementById('editDrugIndications').value.trim();
+
+                if (typeof MASTER_FORMULARY !== 'undefined') {
+                    const mIdx = MASTER_FORMULARY.findIndex(x => x.id === id);
+                    if (mIdx !== -1) {
+                        MASTER_FORMULARY[mIdx] = { ...formularyList[idx] };
+                    }
+                }
+
+                renderFormularyTable(formularyList);
+                closeModal('editDrugModal');
+                showNotification(`تم تحديث وحفظ معلومات دواء [${formularyList[idx].name}] في دليل المخزون بنجاح!`, 'success');
+            }
+        }
+
+        function deleteFormularyDrug(id) {
+            const drug = formularyList.find(x => x.id === id);
+            if (!drug) return;
+
+            if (confirm(`هل أنت متأكد من حذف دواء "${drug.name}" من دليل المخزون المعتمد؟`)) {
+                formularyList = formularyList.filter(x => x.id !== id);
+                document.getElementById('formularyTotalCount').textContent = `${formularyList.length} دواء`;
+                renderFormularyTable(formularyList);
+                showNotification(`تم حذف الدواء [${drug.name}] من دليل المخزون.`, 'success');
+            }
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function filterFormulary() {
+            const q = (document.getElementById('formularySearchInput').value || '').trim().toLowerCase();
+            const cat = document.getElementById('formularyCategoryFilter').value;
+
+            let filtered = [...formularyList];
+
+            if (q) {
+                filtered = filtered.filter(d => 
+                    (d.name || '').toLowerCase().includes(q) ||
+                    (d.generic_name || '').toLowerCase().includes(q) ||
+                    (d.indications || '').toLowerCase().includes(q) ||
+                    String(d.id) === q
+                );
+            }
+
+            if (cat !== 'all') {
+                filtered = filtered.filter(d => {
+                    const c = (d.category || '').toLowerCase();
+                    if (cat === 'gastro') return c.includes('هضم') || c.includes('معدة') || c.includes('قولون') || c.includes('ppi');
+                    if (cat === 'analgesic') return c.includes('مسكن') || c.includes('حرارة');
+                    if (cat === 'nsaid') return c.includes('التهاب') || c.includes('مفاصل') || c.includes('عظام');
+                    if (cat === 'cardio') return c.includes('قلب') || c.includes('ضغط') || c.includes('كوليسترول') || c.includes('دهون');
+                    if (cat === 'diabetes') return c.includes('سكر') || c.includes('غدد');
+                    if (cat === 'respiratory') return c.includes('تنفس') || c.includes('حساسية') || c.includes('ربو');
+                    if (cat === 'antibiotic') return c.includes('مضاد حيوي') || c.includes('ميكروب');
+                    if (cat === 'cns') return c.includes('نفسي') || c.includes('عصب') || c.includes('اكتئاب');
+                    if (cat === 'vitamins') return c.includes('فيتامين') || c.includes('مكمل') || c.includes('حديد');
+                    if (cat === 'derm') return c.includes('جلد') || c.includes('عين') || c.includes('مسالك');
+                    return true;
+                });
+            }
+
+            renderFormularyTable(filtered);
+        }
+
+        function resetFormularyFilters() {
+            document.getElementById('formularySearchInput').value = '';
+            document.getElementById('formularyCategoryFilter').value = 'all';
+            renderFormularyTable(formularyList);
+        }
+    </script>
+</body>
+</html>

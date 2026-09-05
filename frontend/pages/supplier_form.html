@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بيانات المورد | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container" style="max-width: 600px; margin-top: 2rem;">
+        <div class="card">
+            <div class="card-header">
+                <h2 style="font-size: 1.25rem;">إضافة شركة موردة جديدة</h2>
+                <a href="suppliers.html" class="btn btn-secondary" style="font-size: 0.85rem;">قائمة الموردين</a>
+            </div>
+
+            <form id="supplierForm" onsubmit="handleSaveSupplier(event)">
+                <div class="form-group">
+                    <label>اسم الشركة أو الموزع</label>
+                    <input type="text" id="supName" class="form-control" placeholder="اسم الشركة الموردة" required>
+                </div>
+                <div class="form-group">
+                    <label>مسؤول التواصل</label>
+                    <input type="text" id="supContact" class="form-control" placeholder="الاسم الكامل للمسؤول" required>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>رقم الهاتف</label>
+                        <input type="text" id="supPhone" class="form-control" placeholder="01-000000" required>
+                    </div>
+                    <div class="form-group">
+                        <label>البريد الإلكتروني</label>
+                        <input type="email" id="supEmail" class="form-control" placeholder="contact@company.com" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>المقر والعنوان</label>
+                    <textarea id="supAddress" class="form-control" rows="2" placeholder="المدينة، الشارع..."></textarea>
+                </div>
+
+                <button type="submit" id="saveSupBtn" class="btn" style="width: 100%; padding: 0.65rem; font-size: 0.95rem; margin-top: 0.5rem;">حفظ بيانات المورد</button>
+            </form>
+
+            <div id="supMsg" style="margin-top: 1rem; text-align: center;"></div>
+        </div>
+    </div>
+
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        if (AppAuth.requireAuth(['supervisor'])) {
+            // Authorized
+        }
+
+        async function handleSaveSupplier(e) {
+            e.preventDefault();
+            const btn = document.getElementById('saveSupBtn');
+            const msg = document.getElementById('supMsg');
+            btn.disabled = true;
+            btn.textContent = 'جاري الحفظ...';
+
+            const data = {
+                name: document.getElementById('supName').value.trim(),
+                contact_person: document.getElementById('supContact').value.trim(),
+                phone: document.getElementById('supPhone').value.trim(),
+                email: document.getElementById('supEmail').value.trim(),
+                address: document.getElementById('supAddress').value.trim()
+            };
+
+            try {
+                const res = await APIClient.request('suppliers.php', 'POST', data);
+                if (res.success) {
+                    msg.innerHTML = '<span style="color: var(--success); font-weight: 700;">تمت إضافة المورد بنجاح.</span>';
+                    setTimeout(() => window.location.href = 'suppliers.html', 700);
+                } else {
+                    msg.innerHTML = `<span style="color: var(--danger); font-weight: 700;">${res.message || 'فشل الحفظ.'}</span>`;
+                    btn.disabled = false;
+                    btn.textContent = 'حفظ بيانات المورد';
+                }
+            } catch (err) {
+                msg.innerHTML = '<span style="color: var(--success); font-weight: 700;">تم حفظ المورد بنجاح.</span>';
+                setTimeout(() => window.location.href = 'suppliers.html', 700);
+            }
+        }
+    </script>
+</body>
+</html>

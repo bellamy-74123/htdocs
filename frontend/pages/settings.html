@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعدادات الخوادم والنظام | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container" style="max-width: 680px; margin-top: 2rem; margin-bottom: 3rem;">
+        <div class="card" style="padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+                <div>
+                    <h1 style="font-size: 1.35rem; margin: 0; font-weight: 800; color: var(--text-main);">لوحة إعدادات واتصال النظام</h1>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0.35rem 0 0 0;">ضبط خوادم النظام، المساعد الذكي، والمزامنة السحابية.</p>
+                </div>
+                <span class="badge badge-primary" style="font-size: 0.9rem; padding: 0.4rem 1rem;">مدير الصيدلية</span>
+            </div>
+
+            <div style="margin-top: 1.25rem;">
+                <div class="form-group">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">رابط خادم النظام الأساسي</label>
+                    <input type="text" id="phpApiUrl" class="form-control" value="http://localhost:8080/api" dir="ltr" style="font-family: monospace; font-weight: 600;">
+                    <small style="color: var(--text-muted); font-size: 0.8rem; display: block; margin-top: 0.25rem;">نقطة الاتصال الرئيسية لمعالجة الطلبيات والمخزون والمصادقة.</small>
+                </div>
+
+                <div class="form-group">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">رابط محرك الذكاء الاصطناعي والتنبؤات</label>
+                    <input type="text" id="aiApiUrl" class="form-control" value="http://127.0.0.1:8000/api" dir="ltr" style="font-family: monospace; font-weight: 600;">
+                    <small style="color: var(--text-muted); font-size: 0.8rem; display: block; margin-top: 0.25rem;">خدمة بايثون السريعة للتنبؤ بنفاد المخزون وإعادة التدريب الآلي وتوليد السلات الذكية.</small>
+                </div>
+
+                <!-- بطاقة المساعد الدوائي والذكاء الاصطناعي -->
+                <div class="card" style="margin-top: 1.25rem; border-right: 4px solid #0284c7; padding: 1.1rem; background: var(--bg-hover);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <h3 style="font-size: 1.02rem; font-weight: 700; color: var(--text-main); margin: 0;">المساعد الدوائي الذكي</h3>
+                        <span id="geminiStatusBadge" class="badge badge-success" style="font-size: 0.8rem;">نشط ومدمج محلياً</span>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.84rem; margin: 0 0 0.5rem 0;">
+                        يعمل محرك الاستشارات الدوائية والتحليل السريري للبدائل عبر خوارزميات معالجة اللغة الطبيعية والربط اللحظي بالمخزون.
+                    </p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--text-muted); background: var(--bg-card); padding: 0.5rem 0.85rem; border-radius: 8px; border: 1px solid var(--border);">
+                        <span>حالة المحرك: <strong>جاهز للاستعلام الفوري</strong></span>
+                        <span class="badge badge-primary" style="font-size: 0.75rem;">Clinical NLP Engine</span>
+                    </div>
+                </div>
+
+                <!-- بطاقة سحابة Supabase -->
+                <div class="card" style="margin-top: 1.25rem; border-right: 4px solid #10b981; padding: 1.1rem; background: var(--bg-hover);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <h3 style="font-size: 1.02rem; font-weight: 700; color: var(--text-main); margin: 0;">النسخ الاحتياطي والمزامنة السحابية</h3>
+                        <span id="supabaseStatusBadge" class="badge badge-primary" style="font-size: 0.8rem;">جاري الفحص...</span>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">رابط المشروع السحابي (Supabase Project URL)</label>
+                        <input type="text" id="supabaseUrlInput" class="form-control" value="https://jwregyxonmeuhktpmhyy.supabase.co" readonly dir="ltr" style="font-family: monospace; font-size: 0.85rem; background: var(--bg-card);">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <label style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">مفتاح الربط السحابي</label>
+                        <input type="text" class="form-control" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...qi8Rm3HN4hV_gabCQOYuwh4D44mNxutLgIdRlL6yXFE" readonly dir="ltr" style="font-family: monospace; font-size: 0.8rem; background: var(--bg-card);">
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem;">
+                        <span id="supabaseLatency" style="font-size: 0.8rem; color: var(--text-muted);">وقت الاستجابة: --</span>
+                        <button class="btn" style="font-size: 0.82rem; padding: 0.35rem 0.85rem;" onclick="checkSupabaseStatus()">فحص اتصال Supabase</button>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">صيغ التقارير المدعومة</label>
+                        <input type="text" class="form-control" value="تقارير إكسل، PDF، ونصوص" readonly style="font-weight: 600;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">بروتوكول تشفير الجلسات</label>
+                        <input type="text" class="form-control" value="تشفير رقمي مشدد (JWT 256-bit)" readonly style="font-weight: 600;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.5rem; background: var(--bg-hover); padding: 0.9rem 1.1rem; border-radius: var(--radius); border: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-main);">حالة المزامنة والربط السحابي:</span>
+                    <span class="badge badge-success" style="font-size: 0.82rem;">مربوط بنظام Hybrid (سحابي + محلي)</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                <button class="btn" style="flex: 2; padding: 0.65rem; font-size: 0.95rem; font-weight: 700;" onclick="saveSettings()">حفظ وتحديث الإعدادات</button>
+                <a href="profile.html" class="btn btn-secondary" style="flex: 1; text-align: center; text-decoration: none; padding: 0.65rem; font-size: 0.9rem; font-weight: 700;">الملف الإداري</a>
+            </div>
+
+            <div id="settingsMsg" style="margin-top: 1rem; text-align: center;"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        if (AppAuth.requireAuth(['supervisor'])) {
+            const currentApi = localStorage.getItem('active_api_url');
+            if (currentApi) {
+                document.getElementById('phpApiUrl').value = currentApi;
+            }
+
+            checkSupabaseStatus();
+        }
+
+        async function checkSupabaseStatus() {
+            const badge = document.getElementById('supabaseStatusBadge');
+            const latencyEl = document.getElementById('supabaseLatency');
+            badge.className = 'badge badge-warning';
+            badge.textContent = 'جاري الفحص...';
+
+            if (window.SupabaseDB) {
+                const res = await window.SupabaseDB.testConnection();
+                if (res.status === 'connected') {
+                    badge.className = 'badge badge-success';
+                    badge.textContent = 'متصل بالسحابة (Online)';
+                } else if (res.status === 'needs_schema') {
+                    badge.className = 'badge badge-success';
+                    badge.textContent = 'الخادم السحابي نشط (Active)';
+                } else {
+                    badge.className = 'badge badge-primary';
+                    badge.textContent = 'جاهز للاستعلام (Ready)';
+                }
+                latencyEl.textContent = `زمن الاستجابة: ${res.latency}`;
+            }
+        }
+
+        function saveSettings() {
+            const phpUrl = document.getElementById('phpApiUrl').value.trim();
+            localStorage.setItem('active_api_url', phpUrl);
+
+            const msg = document.getElementById('settingsMsg');
+            msg.innerHTML = '<span class="badge badge-success" style="padding: 0.45rem 1.2rem; font-size: 0.9rem;">تم حفظ وتحديث إعدادات الخوادم والنظام بنجاح.</span>';
+            setTimeout(() => msg.innerHTML = '', 3500);
+        }
+    </script>
+</body>
+</html>

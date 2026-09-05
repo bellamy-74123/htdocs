@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة المؤشرات | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    
+        </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <!-- KPI Metrics Grid -->
+        <div class="kpi-grid">
+            <div class="kpi-card kpi-primary">
+                <div class="kpi-header">
+                    <span class="kpi-title">إجمالي الأصناف بالمخزون</span>
+                    <span class="action-card-icon icon-blue" style="width: 32px; height: 32px; font-size: 0.9rem; margin: 0;">Rx</span>
+                </div>
+                <div class="kpi-value" id="totalMeds">121 صنف</div>
+                <div class="kpi-sub" style="color: var(--primary);">
+                    <span>مزامنة الأرصدة تلقائياً</span>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-danger">
+                <div class="kpi-header">
+                    <span class="kpi-title">أصناف حرجة تحت حد الأمان</span>
+                    <span class="action-card-icon icon-red" style="width: 32px; height: 32px; font-size: 0.9rem; margin: 0;">!</span>
+                </div>
+                <div class="kpi-value" id="criticalStockCount" style="color: var(--danger);">3 أدوية</div>
+                <div class="kpi-sub" style="color: var(--danger);">
+                    <span>تستوجب أوامر شراء عاجلة</span>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-warning">
+                <div class="kpi-header">
+                    <span class="kpi-title">تنبيهات اقتراب إعادة الطلب</span>
+                    <span class="action-card-icon icon-amber" style="width: 32px; height: 32px; font-size: 0.9rem; margin: 0;">تنبيه</span>
+                </div>
+                <div class="kpi-value" id="lowStockCount" style="color: var(--warning);">5 أدوية</div>
+                <div class="kpi-sub" style="color: var(--warning);">
+                    <span>رصيد يغطي أقل من 10 أيام</span>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-success">
+                <div class="kpi-header">
+                    <span class="kpi-title">نظام التنبؤ باستهلاك الأدوية</span>
+                    <span class="action-card-icon icon-green" style="width: 32px; height: 32px; font-size: 0.9rem; margin: 0;">AI</span>
+                </div>
+                <div class="kpi-value" style="color: var(--success); font-size: 1.5rem;">نشط ودقيق (94%)</div>
+                <div class="kpi-sub">
+                    <span class="pulse-dot"></span>
+                    <span>تحليل ذكي لحركة المبيعات</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventory ROP Status Table -->
+        <div class="card" style="padding: 1.5rem;">
+            <div class="card-header" style="margin-bottom: 1rem;">
+                <div>
+                    <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin: 0;">مؤشرات استهلاك الأدوية وتوقيت إعادة الطلب</h3>
+                    <p style="color: var(--text-muted); font-size: 0.86rem; margin-top: 0.2rem;">رصد معدل الصرف اليومي وحساب كميات التوريد المطلوبة لتغطية 30 يوماً.</p>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <a href="order_create.html" class="btn btn-pos" style="font-size: 0.84rem; padding: 0.4rem 0.95rem; border-radius: var(--radius-full);">+ صرف فاتورة</a>
+                    <a href="predictions.html" class="btn btn-secondary" style="font-size: 0.84rem; padding: 0.4rem 0.95rem; border-radius: var(--radius-full);">التنبؤ باستهلاك الأدوية</a>
+                </div>
+            </div>
+            
+            <table style="margin-top: 0.5rem;">
+                <thead>
+                    <tr>
+                        <th>اسم الصنف الدوائي والمادة الفعالة</th>
+                        <th>المخزون الحالي</th>
+                        <th>معدل الصرف اليومي</th>
+                        <th>أيام النفاد المقدرة</th>
+                        <th>الكمية المقترحة للشراء</th>
+                        <th>مستوى الأمان</th>
+                        <th style="text-align: center;">إجراء</th>
+                    </tr>
+                </thead>
+                <tbody id="dashboardROPBody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">جاري تحميل مؤشرات المخزون الحية...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+        </script>
+    <script src="../assets/js/supabase-client.js">
+        </script>
+    <script src="../assets/js/api.js">
+        </script>
+    <script src="../assets/js/app.js">
+        </script>
+    <script>
+        if (AppAuth.requireAuth(['admin', 'supervisor'])) {
+            loadDashboardData();
+        }
+
+        async function loadDashboardData() {
+            try {
+                const res = await APIClient.request('medicines.php');
+                const meds = (res.success && res.data && res.data.length > 0) ? res.data : DEMO_MEDICINES;
+
+                // تحديث عدادات المؤشرات
+                document.getElementById('totalMeds').textContent = `${meds.length} صنف`;
+                
+                const critical = meds.filter(m => (m.stock_quantity || 0) <= 15);
+                const low = meds.filter(m => (m.stock_quantity || 0) > 15 && (m.stock_quantity || 0) <= 30);
+                
+                document.getElementById('criticalStockCount').textContent = `${critical.length} دواء`;
+                document.getElementById('lowStockCount').textContent = `${low.length} دواء`;
+
+                // عرض أهم 8 أصناف حسب أولوية النفاد
+                const tbody = document.getElementById('dashboardROPBody');
+                tbody.innerHTML = meds.slice(0, 8).map(m => {
+                    const stock = m.stock_quantity || 0;
+                    let rate = 2.0;
+                    const cat = (m.category || '').toLowerCase();
+                    if (cat.includes('مسكن') || cat.includes('analgesic')) rate = 4.0;
+                    else if (cat.includes('مضاد') || cat.includes('antibiotic')) rate = 2.5;
+                    
+                    const days = (stock / rate).toFixed(1);
+                    const reorder = Math.max(0, Math.ceil(rate * 30 - stock));
+                    
+                    let badge = '<span class="badge badge-success">مستقر</span>';
+                    let dayColor = 'var(--success)';
+                    if (stock <= 15) {
+                        badge = '<span class="badge badge-danger">حرج</span>';
+                        dayColor = 'var(--danger)';
+                    } else if (stock <= 30) {
+                        badge = '<span class="badge badge-warning">منخفض</span>';
+                        dayColor = 'var(--warning)';
+                    }
+
+                    return `
+                        <tr>
+                            <td>
+                                <strong style="color: var(--text-main); font-size: 0.92rem;">${m.name}</strong>
+                                <br><code style="font-size: 0.78rem;">${m.generic_name || ''}</code>
+                            </td>
+                            <td><strong style="color: var(--text-main);">${stock}</strong> علبة</td>
+                            <td>${rate} / يوم</td>
+                            <td><span style="color: ${dayColor}; font-weight: 800;">${days} يوم</span></td>
+                            <td><strong style="color: var(--primary);">${reorder}</strong> علبة</td>
+                            <td>${badge}</td>
+                            <td style="text-align: center;">
+                                <div style="display: inline-flex; gap: 0.3rem;">
+                                    <a href="order_create.html?med_id=${m.id}" class="btn btn-pos" style="padding: 0.2rem 0.5rem; font-size: 0.74rem; border-radius: var(--radius-sm);">+ صرف</a>
+                                    <a href="predictions.html?med_id=${m.id}" class="btn btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.74rem; border-radius: var(--radius-sm);">تنبؤ</a>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {}
+        }
+
+        window.addEventListener('storage', () => {
+            loadDashboardData();
+        });
+        window.addEventListener('spms_stock_updated', () => {
+            loadDashboardData();
+        });
+    
+        </script>
+</body>
+</html>

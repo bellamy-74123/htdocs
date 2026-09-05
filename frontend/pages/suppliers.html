@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة الموردين والشركات | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+    <style>
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            padding: 1rem;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            width: 100%;
+            max-width: 580px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            padding: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
+            <div class="card-header" style="margin-bottom: 1rem;">
+                <div>
+                    <h2 style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0;">دليل الشركات الموردة والموزعين</h2>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">إدارة بيانات شركات التوزيع، تسجيل الموردين يدوياً، ومتابعة التواصل والتخصصات.</p>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-pos" onclick="openAddSupplierModal()" style="font-weight: 800; font-size: 0.88rem;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span>إضافة مورد جديد يدوياً</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Suppliers Search Bar -->
+            <div style="display: flex; gap: 0.6rem; margin-bottom: 1rem;">
+                <input type="text" id="supSearchInput" class="form-control" placeholder="بحث بالاسم، مسؤول الاتصال، رقم الهاتف، أو التخصص..." oninput="filterSuppliers(this.value)" style="flex: 1; font-weight: 600;">
+                <button class="btn btn-secondary" onclick="document.getElementById('supSearchInput').value=''; loadSuppliersTable();">إعادة ضبط</button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>اسم الشركة الموردة</th>
+                            <th>مسؤول الاتصال</th>
+                            <th>رقم الهاتف / الجوال</th>
+                            <th>البريد الإلكتروني</th>
+                            <th>المقر والمدينة</th>
+                            <th>التخصص الدوائي</th>
+                            <th style="text-align: center;">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suppliersTableBody">
+                        <tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">جاري تحميل بيانات الموردين...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL: Add New Supplier Manually                                         -->
+    <!-- ========================================================================= -->
+    <div id="addSupplierModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">إضافة شركة موردة جديدة يدوياً</h3>
+                <button onclick="closeModal('addSupplierModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <form onsubmit="handleAddSupplierSubmit(event)">
+                <div class="form-group" style="margin-bottom: 0.85rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">اسم الشركة الموردة / الموزع</label>
+                    <input type="text" id="supName" class="form-control" placeholder="مثال: شركة الخليج للتموين الصيدلي" required style="font-weight: 700;">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">مسؤول الاتصال / المندوب</label>
+                        <input type="text" id="supContact" class="form-control" placeholder="مثال: أ. فيصل السعيد" required>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">رقم الجوال / الهاتف</label>
+                        <input type="text" id="supPhone" class="form-control" placeholder="مثال: 0501234567" required dir="ltr" style="font-weight: 700;">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">البريد الإلكتروني</label>
+                        <input type="email" id="supEmail" class="form-control" placeholder="orders@gulf-pharma.sa" dir="ltr">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المقر والمدينة</label>
+                        <input type="text" id="supAddress" class="form-control" placeholder="مثال: جدة - حي الرويس" required>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">التخصص الدوائي / الأصناف الموردة</label>
+                    <input type="text" id="supSpecialty" class="form-control" placeholder="مثال: أدوية حيوية، مسكنات، وأدوية أمراض مزمنة">
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addSupplierModal')">إلغاء</button>
+                    <button type="submit" class="btn btn-pos" style="padding: 0.55rem 1.4rem; font-weight: 800;">حفظ المورد في الدليل</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        let currentSuppliers = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!AppAuth.requireAuth(['supervisor'])) return;
+            loadSuppliersTable();
+        });
+
+        function loadSuppliersTable() {
+            currentSuppliers = window.getSuppliersList();
+            renderSuppliers(currentSuppliers);
+        }
+
+        function renderSuppliers(list) {
+            const tbody = document.getElementById('suppliersTableBody');
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">لا يوجد موردين مطابقين للبحث.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = list.map(s => `
+                <tr>
+                    <td style="font-weight: 700; color: var(--text-muted);">#${s.id}</td>
+                    <td><strong style="color: var(--text-main); font-size: 0.94rem;">${s.name}</strong></td>
+                    <td>${s.contact_person || '-'}</td>
+                    <td><span dir="ltr" style="font-weight: 700; color: var(--primary);">${s.phone || '-'}</span></td>
+                    <td style="font-size: 0.84rem; color: var(--text-muted);">${s.email || '-'}</td>
+                    <td style="font-size: 0.86rem;">${s.address || '-'}</td>
+                    <td><span class="badge badge-primary" style="font-size: 0.78rem;">${s.specialty || 'أدوية عامة'}</span></td>
+                    <td style="text-align: center;">
+                        ${s.id > 3 ? `<button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.74rem; color: var(--danger); border-color: rgba(220,38,38,0.3);" onclick="deleteSupplier(${s.id})">حذف</button>` : `<span style="font-size: 0.75rem; color: var(--text-muted);">مورد رئيسي</span>`}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openAddSupplierModal() {
+            document.getElementById('supName').value = '';
+            document.getElementById('supContact').value = '';
+            document.getElementById('supPhone').value = '';
+            document.getElementById('supEmail').value = '';
+            document.getElementById('supAddress').value = '';
+            document.getElementById('supSpecialty').value = '';
+            document.getElementById('addSupplierModal').classList.add('active');
+        }
+
+        function handleAddSupplierSubmit(e) {
+            e.preventDefault();
+            const newSup = {
+                name: document.getElementById('supName').value.trim(),
+                contact_person: document.getElementById('supContact').value.trim(),
+                phone: document.getElementById('supPhone').value.trim(),
+                email: document.getElementById('supEmail').value.trim(),
+                address: document.getElementById('supAddress').value.trim(),
+                specialty: document.getElementById('supSpecialty').value.trim() || 'أدوية عامة ومستلزمات'
+            };
+
+            window.saveCustomSupplier(newSup);
+            loadSuppliersTable();
+            closeModal('addSupplierModal');
+            showNotification(`تمت إضافة المورد [${newSup.name}] يدوياً إلى النظام بنجاح!`, 'success');
+        }
+
+        function deleteSupplier(id) {
+            if (confirm('هل أنت متأكد من حذف هذا المورد من الدليل؟')) {
+                try {
+                    const custom = localStorage.getItem('custom_suppliers');
+                    if (custom) {
+                        let list = JSON.parse(custom);
+                        list = list.filter(x => x.id !== id);
+                        localStorage.setItem('custom_suppliers', JSON.stringify(list));
+                    }
+                    loadSuppliersTable();
+                    showNotification('تم حذف المورد بنجاح.', 'success');
+                } catch (e) {}
+            }
+        }
+
+        function filterSuppliers(q) {
+            const normQ = (q || '').toLowerCase().trim();
+            if (!normQ) {
+                renderSuppliers(currentSuppliers);
+                return;
+            }
+            const filtered = currentSuppliers.filter(s => 
+                (s.name || '').toLowerCase().includes(normQ) ||
+                (s.contact_person || '').toLowerCase().includes(normQ) ||
+                (s.phone || '').includes(normQ) ||
+                (s.specialty || '').toLowerCase().includes(normQ) ||
+                (s.address || '').toLowerCase().includes(normQ)
+            );
+            renderSuppliers(filtered);
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+    </script>
+</body>
+</html>

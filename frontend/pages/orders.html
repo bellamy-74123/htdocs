@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل الفواتير والطلبات | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+    <style>
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--bg-card, #ffffff);
+            border-radius: 8px;
+            max-width: 680px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            border: 1px solid var(--border);
+        }
+        .orders-tab-btn {
+            padding: 0.42rem 0.95rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.83rem;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-main);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .orders-tab-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .orders-tab-btn.active {
+            background: var(--primary-gradient);
+            color: #ffffff !important;
+            border-color: transparent;
+            box-shadow: 0 3px 10px rgba(2, 132, 199, 0.3);
+            font-weight: 800;
+        }
+        @media print {
+            body * { visibility: hidden; }
+            #printableArea, #printableArea * { visibility: visible; }
+            #printableArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 15px;
+                background: #fff !important;
+                color: #000 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
+            <div class="card-header" style="margin-bottom: 1rem;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 0.65rem;">
+                        <span class="hospital-icon-badge icon-blue" style="width: 36px; height: 36px; border-radius: 8px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        </span>
+                        <h2 style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0;">سجل الفواتير وطلبات الأدوية</h2>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">متابعة فواتير الصرف اليومية، فواتير التوريد للموردين، وطلبات الأدوية الواردة من الصيدلي.</p>
+                </div>
+                <div id="ordersHeaderActions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Injected by role -->
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+                <button class="orders-tab-btn active" onclick="switchOrdersTab('sales', this)">1. فواتير الصرف والمبيعات (POS)</button>
+                <button class="orders-tab-btn" id="btnTabRequests" onclick="switchOrdersTab('requests', this)">
+                    2. طلبات الأدوية الواردة من الصيادلة <span id="reqCountBadge" class="badge badge-danger" style="margin-right: 4px; font-size: 0.72rem;">2</span>
+                </button>
+                <button class="orders-tab-btn" id="btnTabRestock" onclick="switchOrdersTab('restock', this)">3. فواتير التوريد من الموردين</button>
+            </div>
+
+            <!-- TAB 1: Sales Invoices -->
+            <div id="tabContentSales">
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>رقم الفاتورة</th>
+                                <th>نوع العملية</th>
+                                <th>العميل / الجهة</th>
+                                <th>طريقة الدفع</th>
+                                <th>عدد الأصناف</th>
+                                <th>الإجمالي (ريال)</th>
+                                <th>التاريخ</th>
+                                <th style="text-align: center;">العمليات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesOrdersBody">
+                            <tr><td colspan="8" style="text-align: center; padding: 2rem;">جاري تحميل سجل الفواتير...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 2: Pharmacist Medicine Requisitions -->
+            <div id="tabContentRequests" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-muted);">طلبات الأدوية:</span>
+                    <div id="tab2ActionBtnContainer"></div>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>الصنف الدوائي المطلوب</th>
+                                <th>الكمية</th>
+                                <th>الأولوية</th>
+                                <th>مقدم الطلب</th>
+                                <th>ملاحظات الصيدلي</th>
+                                <th>التاريخ</th>
+                                <th>حالة الطلب</th>
+                                <th style="text-align: center; min-width: 140px;">إجراء الإدارة</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requisitionsTableBody">
+                            <tr><td colspan="9" style="text-align: center; padding: 2rem;">جاري تحميل طلبات الأدوية...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 3: Supplier Purchase Restock Invoices (Manager Only) -->
+            <div id="tabContentRestock" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-muted);">فواتير وأوامر الشراء المستلمة من الشركات الموردة:</span>
+                    <a href="order_create.html" class="btn btn-pos" style="font-size: 0.82rem; font-weight: 800;">+ إصدار فاتورة توريد جديدة للمورد</a>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>رقم الشحنة</th>
+                                <th>الشركة الموردة</th>
+                                <th>عدد الأصناف</th>
+                                <th>إجمالي التوريد (ريال)</th>
+                                <th>التاريخ</th>
+                                <th>حالة الاستلام</th>
+                                <th style="text-align: center;">العمليات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="restockOrdersBody">
+                            <tr><td colspan="7" style="text-align: center; padding: 2rem;">جاري تحميل فواتير التوريد...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: View Invoice -->
+    <div id="viewInvoiceModal" class="modal-overlay">
+        <div class="modal-content invoice-modal-dialog">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                <h3 style="font-size: 1.1rem; margin: 0; font-weight: 800; color: #0f2942;">معاينة وتفاصيل الفاتورة</h3>
+                <button onclick="closeInvoiceModal()" class="btn btn-secondary" style="padding: 0.2rem 0.6rem; font-size: 0.85rem;">إغلاق</button>
+            </div>
+            <div id="invoiceDetailContainer"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; border-top: 1px solid #e2e8f0; padding-top: 0.75rem;">
+                <button onclick="closeInvoiceModal()" class="btn btn-secondary">إغلاق</button>
+                <button onclick="printCurrentInvoice()" class="btn btn-pos" style="font-weight: 700;">طباعة الفاتورة</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- منطقة مخصصة للطباعة المستقلة -->
+    <div id="printableArea" style="display: none;"></div>
+
+    <!-- MODAL: Send Medicine Request -->
+    <div id="requestMedModal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 560px; border-radius: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">إرسال طلب توفير أدوية لمدير الصيدلية</h3>
+                    
+                </div>
+                <button onclick="closeModal('requestMedModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <form onsubmit="handleSendMedicineRequest(event)">
+                                                <div class="form-group" style="margin-bottom: 0.85rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">الصنف الدوائي المطلوب:</label>
+                    <select id="reqMedSelect" class="form-control" required style="font-weight: 700; padding: 0.6rem;">
+                        <option value="">-- اختر الدواء من القائمة --</option>
+                    </select>
+                </div>
+
+                <!-- Live Medicine Details Banner inside modal -->
+                <div id="reqMedInfoBanner" style="display: none; background: var(--primary-light); border: 1px solid rgba(2, 132, 199, 0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.85rem; font-size: 0.84rem;">
+                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                        <div>المادة الفعالة: <strong id="reqInfoGeneric" style="color: var(--text-main);">-</strong></div>
+                        <div>الفئة: <strong id="reqInfoCategory" style="color: var(--text-main);">-</strong></div>
+                        <div>الرصيد المتاح بالمخزن: <strong id="reqInfoStock" style="color: var(--primary); font-size: 0.95rem;">-</strong></div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الكمية المطلوبة (علبة)</label>
+                        <input type="number" id="reqQty" class="form-control" value="30" min="1" required style="font-weight: 800; padding: 0.55rem;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">درجة الأولوية</label>
+                        <select id="reqPriority" class="form-control" style="font-weight: 700; padding: 0.55rem;">
+                            <option value="عاجل">عاجل (رصيد نافد / حرج)</option>
+                            <option value="عادي" selected>عادي (طلب دوري)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">ملاحظات الصيدلي للإدارة</label>
+                    <textarea id="reqNotes" class="form-control" rows="2" placeholder="اكتب سبب طلب التوفير أو قسم المستشفى المحتاج..."></textarea>
+                </div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('requestMedModal')">إلغاء</button>
+                    <button type="submit" class="btn btn-pos" style="padding: 0.55rem 1.4rem; font-weight: 800;">إرسال الطلب للمدير</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        let cachedOrders = [];
+        let cachedMedicines = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            renderHeaderActions();
+            loadOrders();
+            loadRequisitions();
+            await loadMedicinesForRequisition();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('action') === 'request') {
+                const reqTabBtn = document.querySelectorAll('.orders-tab-btn')[1];
+                switchOrdersTab('requests', reqTabBtn);
+                openRequestMedModal(urlParams.get('med') || '');
+            }
+        });
+
+        async function loadMedicinesForRequisition() {
+            try {
+                const res = await APIClient.request('medicines.php');
+                cachedMedicines = (res.success && res.data && res.data.length > 0) ? res.data : (window.DEMO_MEDICINES || []);
+            } catch(e) {
+                cachedMedicines = window.DEMO_MEDICINES || [];
+            }
+        }
+
+        function populateRequisitionDropdown(selectedName = '') {
+            const select = document.getElementById('reqMedSelect');
+            if (!select) return;
+
+            if (!cachedMedicines || cachedMedicines.length === 0) {
+                select.innerHTML = '<option value="">لا توجد أدوية مسجلة بالمخزن</option>';
+                return;
+            }
+
+            let html = '<option value="">-- اختر الدواء من قائمة أصناف الصيدلية والمخزن (' + cachedMedicines.length + ' صنف) --</option>';
+            const sorted = [...cachedMedicines].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+
+            sorted.forEach(m => {
+                const stock = parseInt(m.stock_quantity || 0);
+                const stockTag = stock <= 15 ? `[حرج: ${stock} علبة]` : `[متوفر: ${stock} علبة]`;
+                const isSel = (selectedName && (m.name.toLowerCase() === selectedName.toLowerCase() || m.id == selectedName)) ? 'selected' : '';
+                html += `<option value="${m.name}" data-id="${m.id}" data-stock="${stock}" data-generic="${m.generic_name || '-'}" data-category="${m.category || '-'}" ${isSel}>${m.name} ${m.generic_name ? `(${m.generic_name})` : ''} - ${stockTag}</option>`;
+            });
+
+            select.innerHTML = html;
+            onReqMedSelectChange();
+        }
+
+        function onReqMedSelectChange() {
+            const select = document.getElementById('reqMedSelect');
+            const badge = document.getElementById('reqMedStockBadge');
+            const banner = document.getElementById('reqMedInfoBanner');
+            const prio = document.getElementById('reqPriority');
+            if (!select) return;
+
+            const opt = select.options[select.selectedIndex];
+            if (!opt || !opt.value) {
+                if (badge) badge.textContent = '';
+                if (banner) banner.style.display = 'none';
+                return;
+            }
+
+            const stock = parseInt(opt.dataset.stock || 0);
+            const generic = opt.dataset.generic || '-';
+            const category = opt.dataset.category || '-';
+
+            const gEl = document.getElementById('reqInfoGeneric');
+            const cEl = document.getElementById('reqInfoCategory');
+            const sEl = document.getElementById('reqInfoStock');
+
+            if (gEl) gEl.textContent = generic;
+            if (cEl) cEl.textContent = category;
+            if (sEl) {
+                sEl.textContent = `${stock} علبة`;
+                sEl.style.color = stock <= 15 ? 'var(--danger)' : 'var(--primary)';
+            }
+            if (banner) banner.style.display = 'block';
+
+            if (stock <= 15) {
+                if (badge) badge.innerHTML = `<span style="color: var(--danger); font-weight: 800;">(مخزون حرج: ${stock} علبة)</span>`;
+                if (prio) prio.value = 'عاجل';
+            } else {
+                if (badge) badge.innerHTML = `<span style="color: var(--success); font-weight: 800;">(مخزون متاح: ${stock} علبة)</span>`;
+                if (prio) prio.value = 'عادي';
+            }
+        }
+
+        function renderHeaderActions() {
+            const container = document.getElementById('ordersHeaderActions');
+            if (container) {
+                container.innerHTML = `
+                    <a href="order_create.html" class="btn btn-pos" style="font-size: 0.85rem; font-weight: 800;">+ صرف فاتورة (POS)</a>
+                `;
+            }
+
+            const role = AppAuth.getNormalizedRole() || 'staff';
+            const isManager = (role === 'supervisor');
+            const restockTabBtn = document.getElementById('btnTabRestock');
+            if (restockTabBtn) {
+                restockTabBtn.style.display = isManager ? 'inline-block' : 'none';
+            }
+        }
+
+        function switchOrdersTab(tabKey, btn) {
+            const role = AppAuth.getNormalizedRole() || 'staff';
+            if (tabKey === 'restock' && role !== 'supervisor') {
+                showNotification('عذراً، فواتير التوريد واستلام شحنات الموردين صلاحية خاصة بمدير الصيدلية فقط.', 'danger');
+                return;
+            }
+
+            document.querySelectorAll('.orders-tab-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+
+            document.getElementById('tabContentSales').style.display = (tabKey === 'sales') ? 'block' : 'none';
+            document.getElementById('tabContentRequests').style.display = (tabKey === 'requests') ? 'block' : 'none';
+            document.getElementById('tabContentRestock').style.display = (tabKey === 'restock') ? 'block' : 'none';
+
+            if (tabKey === 'requests') loadRequisitions();
+            if (tabKey === 'restock') loadRestockOrders();
+        }
+
+        async function loadOrders() {
+            try {
+                let ordersList = [];
+                const res = await APIClient.request('orders.php');
+                if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+                    ordersList = res.data;
+                } else if (typeof window.getPersistentOrders === 'function') {
+                    ordersList = window.getPersistentOrders();
+                } else if (typeof DEMO_ORDERS !== 'undefined') {
+                    ordersList = DEMO_ORDERS;
+                }
+
+                // دمج الفاتورة الأخيرة من sessionStorage في حال لم تكن مسجلة بالقائمة بعد
+                try {
+                    const lastSaved = sessionStorage.getItem('spms_last_invoice');
+                    if (lastSaved) {
+                        const parsedLast = JSON.parse(lastSaved);
+                        if (parsedLast && (parsedLast.invoice_number || parsedLast.id)) {
+                            const exists = ordersList.some(o => (parsedLast.invoice_number && o.invoice_number === parsedLast.invoice_number) || (parsedLast.id && o.id === parsedLast.id));
+                            if (!exists) {
+                                ordersList.unshift(parsedLast);
+                            }
+                        }
+                    }
+                } catch(e) {}
+
+                cachedOrders = ordersList;
+
+                // التصنيف الدقيق: فواتير التوريد تخص الموردين بالمبالغ التموينية (500+ ريال أو اسم مورد صريح)
+                const isSupplierRestock = (o) => (o.order_type === 'routine_restock') && 
+                    (parseFloat(o.total_amount || 0) >= 500 || (o.customer_name && (o.customer_name.includes('شركة') || o.customer_name.includes('مورد') || o.customer_name.includes('Supplier'))));
+
+                const salesList = cachedOrders.filter(o => !isSupplierRestock(o));
+                const tbody = document.getElementById('salesOrdersBody');
+
+                if (!salesList || salesList.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                                <div style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem; color: var(--text-main);">لا توجد فواتير صرف مسجلة حالياً</div>
+                                <div style="font-size: 0.82rem; margin-bottom: 0.75rem;">يمكنك إصدار فواتير صرف وصرف نقدي للمرضى مباشرة عبر نقطة البيع.</div>
+                                <a href="order_create.html" class="btn btn-pos" style="font-size: 0.82rem; padding: 0.4rem 1.1rem; display: inline-flex; align-items: center; gap: 0.3rem;">
+                                    + إنشاء فاتورة صرف جديدة (POS)
+                                </a>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = salesList.map((o) => {
+                    let typeBadge = '<span class="badge badge-success">صرف نقدي للمرضى</span>';
+                    if (o.order_type === 'department_dispense') {
+                        typeBadge = '<span class="badge badge-warning">صرف لأقسام المستشفى</span>';
+                    }
+
+                    let payLabel = (o.payment_method === 'card') ? 'بطاقة بنكية' : ((o.payment_method === 'credit') ? 'آجل / عهدة' : 'نقدي');
+                    const itemsCount = (o.items && Array.isArray(o.items)) ? o.items.length : 1;
+                    const invNumber = o.invoice_number || `#INV-${o.id}`;
+                    const custName = o.customer_name || 'عميل نقدي';
+                    const dateStr = o.created_at ? String(o.created_at).substring(0, 16) : '2026-09-05 14:00';
+
+                    return `
+                        <tr>
+                            <td><strong style="color: var(--primary);">${invNumber}</strong></td>
+                            <td>${typeBadge}</td>
+                            <td>${custName}</td>
+                            <td><span style="font-size: 0.85rem;">${payLabel}</span></td>
+                            <td style="text-align: center;">${itemsCount}</td>
+                            <td style="font-weight: 800;">${parseFloat(o.total_amount || 0).toFixed(2)}</td>
+                            <td><span style="font-size: 0.82rem; color: var(--text-muted);">${dateStr}</span></td>
+                            <td style="text-align: center;">
+                                <button type="button" class="btn btn-secondary" style="padding: 0.22rem 0.6rem; font-size: 0.78rem;" onclick="viewInvoiceDetail('${invNumber}')">معاينة وطباعة</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function loadRequisitions() {
+            const list = window.getMedicineRequests ? window.getMedicineRequests() : [];
+            document.getElementById('reqCountBadge').textContent = list.length;
+            const tbody = document.getElementById('requisitionsTableBody');
+            const isManager = (AppAuth.getNormalizedRole() === 'supervisor');
+            
+            const btnBox = document.getElementById('tab2ActionBtnContainer');
+            if (btnBox) {
+                btnBox.innerHTML = (!isManager) ? '<button class="btn btn-pos" onclick="openRequestMedModal()" style="font-size: 0.82rem; font-weight: 800;">+ إرسال طلب دواء جديد</button>' : '';
+            }
+
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-muted);">لا توجد طلبات أدوية مسجلة حالياً.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = list.map(r => {
+                let prioBadge = r.priority === 'عاجل' ? '<span class="badge badge-danger">عاجل</span>' : '<span class="badge badge-primary">عادي</span>';
+                let statusBadge = r.status === 'معتمد للتوريد' ? '<span class="badge badge-success">معتمد للتوريد</span>' : '<span class="badge badge-warning">قيد المراجعة</span>';
+
+                let actionHtml = '';
+                if (isManager) {
+                    if (r.status !== 'معتمد للتوريد') {
+                        actionHtml = `
+                            <button class="btn btn-pos" style="padding: 0.2rem 0.55rem; font-size: 0.74rem;" onclick="approveRequisition(${r.id})">اعتماد وتوريد</button>
+                            <button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.74rem; color: var(--danger);" onclick="rejectRequisition(${r.id})">رفض</button>
+                        `;
+                    } else {
+                        actionHtml = `<span style="font-size: 0.75rem; color: #059669; font-weight: 700;">تم اعتماد التوريد</span>`;
+                    }
+                } else {
+                    actionHtml = `<span style="font-size: 0.75rem; color: var(--text-muted);">تم الإرسال للمدير</span>`;
+                }
+
+                return `
+                    <tr>
+                        <td style="font-weight: 700; color: var(--text-muted);">#${r.id}</td>
+                        <td><strong style="color: var(--text-main); font-size: 0.92rem;">${r.medicine_name}</strong></td>
+                        <td style="font-weight: 800; color: var(--primary);">${r.requested_qty} علبة</td>
+                        <td>${prioBadge}</td>
+                        <td><span style="font-size: 0.84rem; font-weight: 600;">${r.requested_by || 'الصيدلي'}</span></td>
+                        <td style="font-size: 0.82rem; color: var(--text-muted); max-width: 200px;">${r.notes || '-'}</td>
+                        <td><span style="font-size: 0.8rem; color: var(--text-muted);">${r.created_at || 'الآن'}</span></td>
+                        <td>${statusBadge}</td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 0.3rem;">${actionHtml}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function loadRestockOrders() {
+            const isSupplierRestock = (o) => (o.order_type === 'routine_restock') && 
+                (parseFloat(o.total_amount || 0) >= 500 || (o.customer_name && (o.customer_name.includes('شركة') || o.customer_name.includes('مورد') || o.customer_name.includes('Supplier'))));
+
+            const restockList = cachedOrders.filter(o => isSupplierRestock(o));
+            const tbody = document.getElementById('restockOrdersBody');
+
+            if (!restockList || restockList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">لا توجد فواتير توريد مشتريات مسجلة حالياً.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = restockList.map((o) => {
+                const invNumber = o.invoice_number || '#RESTOCK-' + o.id;
+                return `
+                <tr>
+                    <td><strong style="color: var(--primary);">${invNumber}</strong></td>
+                    <td><strong>${o.customer_name || 'الشركة الوطنية للتموين الطبي'}</strong></td>
+                    <td style="text-align: center;">${(o.items && o.items.length) || 1}</td>
+                    <td style="font-weight: 800;">${parseFloat(o.total_amount || 0).toFixed(2)}</td>
+                    <td><span style="font-size: 0.82rem; color: var(--text-muted);">${o.created_at || '2026-08-30'}</span></td>
+                    <td><span class="badge badge-success">تم الاستلام وإيداع المخزون</span></td>
+                    <td style="text-align: center;">
+                        <button class="btn btn-secondary" style="padding: 0.22rem 0.6rem; font-size: 0.78rem;" onclick="viewInvoiceDetail('${invNumber}')">معاينة الفاتورة</button>
+                    </td>
+                </tr>
+            `;
+            }).join('');
+        }
+
+        function approveRequisition(id) {
+            window.updateMedicineRequestStatus(id, 'معتمد للتوريد');
+            loadRequisitions();
+            showNotification('تم اعتماد طلب التوريد بنجاح! يمكن لمدير الصيدلية الآن إدراج الدفعة من المورد.', 'success');
+        }
+
+        function rejectRequisition(id) {
+            window.updateMedicineRequestStatus(id, 'مرفوض من الإدارة');
+            loadRequisitions();
+            showNotification('تم رفض الطلب.', 'info');
+        }
+
+
+        
+        
+        function populateRequisitionDropdown(selectedName = '') {
+            const select = document.getElementById('reqMedSelect');
+            if (!select) return;
+            const list = (cachedMedicines && cachedMedicines.length > 0) ? cachedMedicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
+
+            select.innerHTML = list.map(m => `
+                <option value="${m.name}" ${selectedName === m.name ? 'selected' : ''}>${m.name} [${m.generic_name || ''}] - رصيد: ${m.stock_quantity} علبة</option>
+            `).join('');
+        }
+
+        function openRequestMedModal(preselectedMedName = '') {
+            document.getElementById('reqQty').value = '30';
+            document.getElementById('reqNotes').value = '';
+
+            if (cachedMedicines.length === 0) {
+                loadMedicinesForRequisition().then(() => {
+                    populateRequisitionDropdown(preselectedMedName);
+                });
+            } else {
+                populateRequisitionDropdown(preselectedMedName);
+            }
+
+            document.getElementById('requestMedModal').classList.add('active');
+        }
+    
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function handleSendMedicineRequest(e) {
+            e.preventDefault();
+            const medSelect = document.getElementById('reqMedSelect');
+            const selectedMedName = medSelect.value.trim();
+
+            if (!selectedMedName) {
+                showNotification('يرجى اختيار الصنف الدوائي من القائمة أولاً', 'error');
+                return;
+            }
+
+            const req = {
+                medicine_name: selectedMedName,
+                requested_qty: parseInt(document.getElementById('reqQty').value) || 1,
+                priority: document.getElementById('reqPriority').value,
+                notes: document.getElementById('reqNotes').value.trim(),
+                requested_by: (AppAuth.getUser() ? AppAuth.getUser().username : 'الصيدلي (كاشير)')
+            };
+
+            window.saveMedicineRequest(req);
+            closeModal('requestMedModal');
+            loadRequisitions();
+            showNotification(`تم إرسال طلب توفير دواء [${req.medicine_name}] لمدير الصيدلية بنجاح!`, 'success');
+        }
+
+        function viewInvoiceDetail(identifier) {
+            let o = null;
+            if (typeof identifier === 'number') {
+                o = cachedOrders[identifier] || cachedOrders.find(item => item.id === identifier);
+            } else {
+                o = cachedOrders.find(item => item.invoice_number === identifier || String(item.id) === String(identifier));
+            }
+            if (!o && cachedOrders.length > 0) o = cachedOrders[0];
+            if (!o) return;
+
+            const modal = document.getElementById('viewInvoiceModal');
+            const container = document.getElementById('invoiceDetailContainer');
+
+            const invNum = o.invoice_number || `#INV-${o.id}`;
+            const dateStr = o.created_at || '2026-08-30';
+            const custName = o.customer_name || 'عميل نقدي';
+            const invType = (o.order_type === 'routine_restock') ? 'توريد مشتريات من مورد' : ((o.order_type === 'department_dispense') ? 'صرف دوائي لأقسام المستشفى' : 'مبيعات وصرف نقدي للمرضى');
+            const payMethod = (o.payment_method === 'card') ? 'شبكة / بطاقة بنكية' : ((o.payment_method === 'credit') ? 'آجل / عهدة قسم' : 'نقدي');
+            const items = (o.items && Array.isArray(o.items) && o.items.length > 0) ? o.items : [
+                {
+                    name: 'صنف دوائي معتمد',
+                    generic_name: '-',
+                    quantity: 1,
+                    unit_price: parseFloat(o.total_amount || 0),
+                    total_price: parseFloat(o.total_amount || 0)
+                }
+            ];
+
+            const subtotal = parseFloat(o.subtotal || o.total_amount || 0);
+            const discount = parseFloat(o.discount || 0);
+            const tax = parseFloat(o.tax_amount || 0);
+            const grandTotal = parseFloat(o.total_amount || 0);
+            const notes = o.notes || '';
+
+            container.innerHTML = `
+                <div class="invoice-paper invoice-wrapper" style="background: #ffffff !important; color: #000000 !important; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: 'Times New Roman', serif;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f2942; padding-bottom: 10px; margin-bottom: 12px;">
+                        <div>
+                            <h2 style="font-size: 16px; margin: 0; color: #0f2942; font-weight: bold;">صيدلية المستشفى المركزي</h2>
+                            <div style="font-size: 12px; color: #334155;">إدارة الخدمات الصيدلانية والإمداد الدوائي</div>
+                            <div style="font-size: 11px; color: #475569;">الرقم الضريبي الموحد: 300982341100003</div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-size: 15px; font-weight: bold; color: #0f2942;">فاتورة رسمية معتمدة</div>
+                            <div style="font-size: 12px; color: #000;">رقم الفاتورة: <strong>${invNum}</strong></div>
+                            <div style="font-size: 11px; color: #334155;">التاريخ: ${dateStr}</div>
+                        </div>
+                    </div>
+
+                    <div class="invoice-header-box" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: #f8fafc !important; color: #000000 !important; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; border: 1px solid #e2e8f0;">
+                        <div><strong>نوع العملية:</strong> ${invType}</div>
+                        <div><strong>العميل / الجهة:</strong> ${custName}</div>
+                        <div><strong>طريقة السداد:</strong> ${payMethod}</div>
+                        <div><strong>حالة الدفع:</strong> ${o.payment_status === 'paid' ? 'مسدد بالكامل' : 'معتمد'}</div>
+                    </div>
+
+                    ${notes ? `
+                    <div class="invoice-header-box" style="background: #f8fafc !important; color: #000000 !important; padding: 6px 10px; border-radius: 8px; margin-bottom: 12px; font-size: 11.5px; border: 1px solid #e2e8f0;">
+                        <strong>ملاحظات وتوجيهات الاستخدام:</strong> ${notes}
+                    </div>` : ''}
+
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11.5px; background: #ffffff !important;">
+                        <thead>
+                            <tr style="background: #0f2942 !important; color: #ffffff !important;">
+                                <th style="border: 1px solid #0f2942; padding: 5px; text-align: right; color: #ffffff !important; background: #0f2942 !important;">#</th>
+                                <th style="border: 1px solid #0f2942; padding: 5px; text-align: right; color: #ffffff !important; background: #0f2942 !important;">اسم الصنف الدوائي</th>
+                                <th style="border: 1px solid #0f2942; padding: 5px; text-align: center; color: #ffffff !important; background: #0f2942 !important;">سعر الوحدة</th>
+                                <th style="border: 1px solid #0f2942; padding: 5px; text-align: center; color: #ffffff !important; background: #0f2942 !important;">الكمية</th>
+                                <th style="border: 1px solid #0f2942; padding: 5px; text-align: left; color: #ffffff !important; background: #0f2942 !important;">الإجمالي (ريال)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${items.map((item, idx) => `
+                                <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'} !important; color: #000000 !important;">
+                                    <td style="border: 1px solid #cbd5e1; padding: 5px; color: #000000 !important;">${idx + 1}</td>
+                                    <td style="border: 1px solid #cbd5e1; padding: 5px; font-weight: bold; color: #000000 !important;">
+                                        ${item.name || item.medicine_name || `دواء #${item.medicine_id}`}
+                                        ${item.generic_name ? `<div style="font-size: 10px; color: #475569;">${item.generic_name}</div>` : ''}
+                                    </td>
+                                    <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; color: #000000 !important;">${(parseFloat(item.unit_price) || 0).toFixed(2)}</td>
+                                    <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold; color: #000000 !important;">${item.quantity}</td>
+                                    <td style="border: 1px solid #cbd5e1; padding: 5px; text-align: left; font-weight: bold; color: #000000 !important;">${(parseFloat(item.total_price) || (parseFloat(item.unit_price) * item.quantity)).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 8px; background: #ffffff;">
+                        <div style="font-size: 10.5px; color: #475569; max-width: 50%;">
+                            * هذه الفاتورة معتمدة إلكترونياً ومسجلة في النظام الآلي للصيدلية.
+                        </div>
+                        <div style="width: 220px; font-size: 12px; line-height: 1.5; color: #000000;">
+                            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding: 2px 0;"><span>المجموع الفرعي:</span><span>${subtotal.toFixed(2)} ريال</span></div>
+                            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding: 2px 0;"><span>قيمة الخصم:</span><span>${discount.toFixed(2)} ريال</span></div>
+                            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding: 2px 0;"><span>ضريبة القيمة المضافة:</span><span>${tax.toFixed(2)} ريال</span></div>
+                            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; color: #0f2942; padding-top: 4px;"><span>الإجمالي النهائي:</span><span>${grandTotal.toFixed(2)} ريال</span></div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #000000;">
+                        <div>توقيع المستلم: ___________________</div>
+                        <div>ختم الصيدلية / الاعتماد: ___________________</div>
+                    </div>
+                </div>
+            `;
+            modal.classList.add('active');
+        }
+
+        function closeInvoiceModal() {
+            document.getElementById('viewInvoiceModal').classList.remove('active');
+        }
+
+        function printCurrentInvoice() {
+            let printArea = document.getElementById('printableArea');
+            if (!printArea) {
+                printArea = document.createElement('div');
+                printArea.id = 'printableArea';
+                document.body.appendChild(printArea);
+            }
+            const previewContent = document.getElementById('invoiceDetailContainer').innerHTML;
+            printArea.innerHTML = previewContent;
+            printArea.style.display = 'block';
+
+            window.print();
+
+            setTimeout(() => {
+                printArea.style.display = 'none';
+                printArea.innerHTML = '';
+            }, 1000);
+        }
+
+        window.addEventListener('storage', () => {
+            loadOrders();
+        });
+        window.addEventListener('spms_stock_updated', () => {
+            loadOrders();
+        });
+    </script>
+</body>
+</html>

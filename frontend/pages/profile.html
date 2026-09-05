@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الملف الشخصي والوظيفي | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container" style="max-width: 680px; margin-top: 2rem; margin-bottom: 3rem;">
+        <!-- بطاقة رأس الملف الوظيفي -->
+        <div class="card" style="margin-bottom: 1.25rem; padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+                <div>
+                    <h1 style="font-size: 1.35rem; margin: 0; font-weight: 800; color: var(--text-main);">الملف الشخصي والصلاحيات الوظيفية</h1>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0.35rem 0 0 0;">بيانات الاعتماد النشطة، مستوى الصلاحيات والامتيازات، ومراقبة حالة الجلسة.</p>
+                </div>
+                <span id="roleBadge" class="badge badge-primary" style="font-size: 0.9rem; padding: 0.4rem 1rem;">مدير الصيدلية</span>
+            </div>
+
+            <!-- شبكة تفاصيل الحساب -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1.25rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">الاسم الوظيفي الكامل</label>
+                    <input type="text" id="profUsername" class="form-control" readonly style="font-weight: 700;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">البريد الإلكتروني المؤسسي</label>
+                    <input type="email" id="profEmail" class="form-control" readonly dir="ltr" style="text-align: right; font-weight: 600;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">المسمى والصلاحيات</label>
+                    <input type="text" id="profRole" class="form-control" readonly style="font-weight: 700; color: var(--primary);">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">حالة بروتوكول الأمان</label>
+                    <input type="text" id="profToken" class="form-control" readonly style="font-weight: 600; color: var(--success);">
+                </div>
+            </div>
+
+            <!-- لوحة الامتيازات الوظيفية -->
+            <div id="permissionsBox" style="margin-top: 1.5rem; background: var(--bg-hover); padding: 1rem; border-radius: var(--radius); border: 1px solid var(--border);">
+                <!-- Dynamic permissions content -->
+            </div>
+
+            <!-- أزرار الإجراءات السريعة -->
+            <div id="quickActionsBox" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1.5rem;">
+                <!-- Dynamic action buttons -->
+            </div>
+
+            <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                <button class="btn btn-danger" style="width: 100%; font-size: 0.92rem; font-weight: 700; padding: 0.65rem;" onclick="AppAuth.logout()">تسجيل الخروج من الجلسة</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        if (AppAuth.requireAuth()) {
+            const user = AppAuth.getUser();
+            const token = AppAuth.getToken();
+            if (user) {
+                const role = AppAuth.getNormalizedRole();
+                const isManager = (role === 'supervisor');
+
+                document.getElementById('profUsername').value = user.username || (isManager ? 'مدير الصيدلية' : 'الصيدلي (كاشير)');
+                document.getElementById('profEmail').value = user.email || (isManager ? 'manager@hospital.local' : 'pharmacist@hospital.local');
+                document.getElementById('profRole').value = isManager ? 'مدير الصيدلية (صلاحيات إدارية كاملة)' : 'صيدلي / كاشير (صرف فواتير)';
+                document.getElementById('profToken').value = token ? 'جلسة مصادقة نشطة ومؤمنة (Bearer JWT)' : 'جلسة محلية آمنة';
+                
+                const roleBadge = document.getElementById('roleBadge');
+                roleBadge.textContent = isManager ? 'مدير الصيدلية' : 'صيدلي (كاشير)';
+                roleBadge.className = isManager ? 'badge badge-warning' : 'badge badge-primary';
+                roleBadge.style.background = isManager ? '#d97706' : '#0284c7';
+                roleBadge.style.color = '#ffffff';
+
+                const permBox = document.getElementById('permissionsBox');
+                const actionsBox = document.getElementById('quickActionsBox');
+
+                if (isManager) {
+                    permBox.innerHTML = `
+                        <h3 style="font-size: 0.95rem; margin: 0 0 0.5rem 0; font-weight: 700; color: var(--text-main);">صلاحيات ومهام مدير الصيدلية:</h3>
+                        <ul style="margin: 0; padding-right: 1.2rem; font-size: 0.86rem; color: var(--text-muted); line-height: 1.8;">
+                            <li>إدارة دليل المخزون الدوائي المعتمد بالكامل (إضافة أدوية بالتحقق بالنت، تعديل المعلومات، وحذف الأصناف).</li>
+                            <li>إدارة دليل الموردين والشركات الموزعة وإضافة الموردين يدوياً.</li>
+                            <li>لوحة المؤشرات الإحصائية ومتابعة الأرصدة ونماذج التنبؤ الذكي بالطلب.</li>
+                            <li>إعدادات النظام وروابط الخوادم ومفاتيح الذكاء الاصطناعي.</li>
+                        </ul>
+                    `;
+                    actionsBox.innerHTML = `
+                        <a href="inventory.html" class="btn" style="text-align: center; text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 0.65rem;">دليل المخزون المركزي</a>
+                        <a href="suppliers.html" class="btn btn-secondary" style="text-align: center; text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 0.65rem;">دليل الموردين والشركات</a>
+                    `;
+                } else {
+                    permBox.innerHTML = `
+                        <h3 style="font-size: 0.95rem; margin: 0 0 0.5rem 0; font-weight: 700; color: var(--text-main);">صلاحيات ومهام الصيدلي (الكاشير):</h3>
+                        <ul style="margin: 0; padding-right: 1.2rem; font-size: 0.86rem; color: var(--text-muted); line-height: 1.8;">
+                            <li>صرف الأدوية ونقطة البيع السريعة (POS) وإصدار فواتير المرضى المباشرة.</li>
+                            <li>استعراض سجل الفواتير السابقة وإعادة الطباعة.</li>
+                            <li>الاستعلام عن توافر الأدوية والأسعار والبدائل عبر قسم الأدوية والمساعد الذكي.</li>
+                        </ul>
+                    `;
+                    actionsBox.innerHTML = `
+                        <a href="order_create.html" class="btn btn-pos" style="text-align: center; text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 0.65rem;">+ صرف فاتورة (POS)</a>
+                        <a href="orders.html" class="btn btn-secondary" style="text-align: center; text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 0.65rem;">سجل الفواتير</a>
+                    `;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

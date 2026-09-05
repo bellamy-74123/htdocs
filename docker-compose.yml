@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+ # MySQL Database Service
+ db:
+ image: mysql:8.0
+ container_name: pharmacy_db
+ restart: always
+ environment:
+ MYSQL_ROOT_PASSWORD: rootpassword
+ MYSQL_DATABASE: pharmacy_db
+ MYSQL_USER: pharmacy_user
+ MYSQL_PASSWORD: pharmacy_pass
+ ports:
+ - "3306:3306"
+ volumes:
+ - db_data:/var/lib/mysql
+ - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+ - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+
+ # Python AI Service (FastAPI)
+ ai-engine:
+ build:
+ context: ./ai-engine
+ dockerfile: Dockerfile
+ container_name: pharmacy_ai_engine
+ restart: always
+ ports:
+ - "8000:8000"
+ environment:
+ - PORT=8000
+ depends_on:
+ - db
+
+ # PHP Web Backend Server
+ backend:
+ image: php:8.2-apache
+ container_name: pharmacy_backend
+ restart: always
+ ports:
+ - "8080:80"
+ volumes:
+ - ./backend:/var/www/html
+ depends_on:
+ - db
+
+volumes:
+ db_data:

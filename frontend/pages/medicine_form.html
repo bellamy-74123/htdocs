@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بيانات الصنف الدوائي | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container" style="max-width: 680px; margin-top: 1.5rem;">
+        <div class="card" style="padding: 1.5rem;">
+            <div class="card-header" style="margin-bottom: 1.25rem;">
+                <div>
+                    <h2 id="formTitle" style="font-size: 1.3rem; font-weight: 900; color: var(--text-main); margin: 0;">إضافة رصيد وتشغيلة دوائية للصيدلية</h2>
+                    
+                </div>
+                <div style="display: flex; gap: 0.4rem;">
+                    <a href="inventory.html" class="btn btn-secondary" style="font-size: 0.82rem;">دليل المخزون</a>
+                    <a href="medicines.html" class="btn btn-secondary" style="font-size: 0.82rem;">قسم الأدوية</a>
+                </div>
+            </div>
+
+            <form id="pharmacyStockForm" onsubmit="handleSavePharmacyMedicine(event)">
+                                                                <!-- 1. Selection from Master Inventory Catalog -->
+                <div class="form-group" style="margin-bottom: 1rem; background: var(--bg-hover); padding: 1rem; border-radius: var(--radius); border: 1.5px solid var(--border);">
+                    <label style="font-weight: 800; font-size: 0.9rem; color: var(--primary); margin-bottom: 0.35rem; display: block;">
+                        اختيار الدواء من دليل المخزون المركزي (121 دواء معتمد):
+                    </label>
+                    <select id="selectFromFormulary" class="form-control" required style="font-weight: 700;" onchange="onFormularyDrugSelected(this.value)">
+                        <option value="">-- اختر الدواء بالاسم التجاري أو العلمي من المخزون --</option>
+                    </select>
+                    <div id="selectedDrugInfoBanner" style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--text-muted); display: none;"></div>
+                </div>
+
+                <!-- 2. Auto-populated details from Master Inventory -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">اسم الصنف التجاري (من المخزون)</label>
+                        <input type="text" id="medName" class="form-control" readonly required style="background: var(--bg-hover); font-weight: 800;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المادة الفعالة (الاسم العلمي)</label>
+                        <input type="text" id="medGeneric" class="form-control" readonly required style="background: var(--bg-hover);">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المجموعة العلاجية</label>
+                        <input type="text" id="medCategory" class="form-control" readonly required style="background: var(--bg-hover);">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">سعر البيع بالصيدلية (ريال)</label>
+                        <input type="number" id="medPrice" class="form-control" step="0.01" value="25.00" required style="font-weight: 800;">
+                    </div>
+                </div>
+
+                <!-- 3. Pharmacy Active Batch Details (Quantity & Expiry) -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الكمية المستلمة بالصيدلية</label>
+                        <input type="number" id="medStock" class="form-control" value="50" min="1" required style="font-weight: 800;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">موقع الرف بالصيدلية</label>
+                        <input type="text" id="medLocation" class="form-control" value="رف A1" placeholder="مثال: رف B2">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">تاريخ الصلاحية (FEFO)</label>
+                        <input type="date" id="medExpiry" class="form-control" value="2027-10-15" required>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">الشركة الموردة</label>
+                    <select id="medSupplier" class="form-control" style="font-weight: 700;">
+                        <!-- Dynamically populated from getSuppliersList -->
+                    </select>
+                </div>
+
+                <button type="submit" id="saveBtn" class="btn btn-pos" style="width: 100%; padding: 0.65rem; font-size: 0.95rem; font-weight: 800;">حفظ وإدراج الصنف في قسم الأدوية</button>
+            </form>
+            <div id="formMsg" style="margin-top: 1rem; text-align: center;"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const editId = urlParams.get('id');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            populateFormularyDropdown();
+            populateSuppliersDropdown();
+            if (editId) {
+                document.getElementById('formTitle').textContent = `تعديل رصيد وسعر الصنف #${editId}`;
+                loadEditMedicineData(editId);
+            }
+        });
+
+        function populateSuppliersDropdown() {
+            const select = document.getElementById('medSupplier');
+            if (!select) return;
+            const list = window.getSuppliersList ? window.getSuppliersList() : [];
+            select.innerHTML = list.map(s => `<option value="${s.id}">${s.name} (${s.address || 'مورد معتمد'})</option>`).join('');
+        }
+
+        
+        
+        
+        
+        function populateFormularyDropdown() {
+            const select = document.getElementById('selectFromFormulary');
+            if (!select) return;
+            select.innerHTML = '<option value="">-- اختر الدواء بالاسم التجاري أو العلمي من المخزون --</option>';
+            const list = (typeof MASTER_FORMULARY !== 'undefined' ? MASTER_FORMULARY : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []));
+
+            list.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.id;
+                opt.textContent = `${d.name} -- [${d.generic_name || d.generic_name_ar || ''}] (${d.category})`;
+                select.appendChild(opt);
+            });
+        }
+    
+    
+    
+        }
+
+        function handleSavePharmacyMedicine(e) {
+            e.preventDefault();
+            const medName = document.getElementById('medName').value.trim();
+            const stock = document.getElementById('medStock').value;
+            const price = document.getElementById('medPrice').value;
+
+            if (!medName) {
+                showNotification('يرجى اختيار الدواء من دليل المخزون أولاً.', 'warning');
+                return;
+            }
+
+            const msg = document.getElementById('formMsg');
+            msg.innerHTML = `<div class="badge badge-success" style="padding: 10px; font-size: 0.9rem;">تم تسجيل [${medName}] برصيد (${stock} علبة) وسعر (${price} ريال) في قسم الأدوية بنجاح! جاري التوجيه...</div>`;
+            setTimeout(() => {
+                window.location.href = 'medicines.html';
+            }, 1200);
+        }
+    </script>
+</body>
+</html>

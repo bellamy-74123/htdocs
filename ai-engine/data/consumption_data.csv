@@ -1,0 +1,7 @@
+medicine_id,medicine_name,monthly_sales,avg_daily_sales,lead_time_days,safety_stock
+1,Panadol Extra,150,5.0,3,20
+2,Amoxil 500mg,60,2.0,5,10
+3,Augmentin 1g,45,1.5,4,8
+4,Cataflam 50mg,90,3.0,3,15
+5,Lipitor 20mg,30,1.0,7,5
+6,Ventolin Inhaler,25,0.8,5,5
