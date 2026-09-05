@@ -11,6 +11,44 @@
         })();
     </script>
     <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+    <style>
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            width: 90%;
+            max-width: 520px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 1.5rem;
+            transform: translateY(20px);
+            transition: transform 0.2s ease;
+        }
+        .modal-overlay.active .modal-content {
+            transform: translateY(0);
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar"></nav>
@@ -270,6 +308,67 @@
                     <!-- Dynamically Generated Anomaly Alerts -->
                 </div>
             </div>
+    </div>
+
+    <!-- MODAL: Quick Dispense Medicine from Predictions & FEFO -->
+    <div id="quickDispenseModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">صرف دواء فوري وخصم المخزون</h3>
+                    <span style="font-size: 0.78rem; color: var(--text-muted);">نظام التنبؤ الذكي وأولوية الصلاحيات (FEFO)</span>
+                </div>
+                <button type="button" onclick="closeModal('quickDispenseModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+
+            <form onsubmit="handleQuickDispenseSubmit(event)">
+                <input type="hidden" id="qdMedId">
+
+                <div style="background: var(--bg-hover); border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem; margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                        <strong id="qdMedName" style="font-size: 1rem; color: var(--text-main);">-</strong>
+                        <span id="qdStockBadge" class="badge badge-success" style="font-weight: 800;">-</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                        <span>المادة الفعالة: <strong id="qdGeneric" style="color: var(--text-main);">-</strong></span>
+                        <span>السعر: <strong id="qdPrice" style="color: var(--primary);">-</strong> ريال</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.35rem;">
+                        <span>تاريخ الصلاحية: <strong id="qdExpiry" style="color: var(--danger);">-</strong></span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">الكمية المراد صرفها (علبة):</label>
+                        <input type="number" id="qdQty" class="form-control" value="1" min="1" required style="font-weight: 800;" oninput="updateQdTotal()">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">نوع الصرف:</label>
+                        <select id="qdType" class="form-control" style="font-weight: 700;" onchange="onQdTypeChange()">
+                            <option value="patient_sale">صرف نقدي للمريض</option>
+                            <option value="department_dispense">صرف لقسم طبي بالمستشفى</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label id="qdCustomerLabel" style="font-weight: 700; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">اسم المريض / العميل:</label>
+                    <input type="text" id="qdCustomer" class="form-control" value="عميل نقدي" required>
+                </div>
+
+                <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.2); border-radius: 8px; padding: 0.75rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-main);">الإجمالي المطلوب سداده:</span>
+                    <span style="font-weight: 900; font-size: 1.15rem; color: var(--primary);"><span id="qdTotal">0.00</span> ريال</span>
+                </div>
+
+                <div id="qdStockWarning" class="badge badge-danger" style="display: none; padding: 0.65rem; margin-bottom: 0.85rem; border-radius: 8px; text-align: center; line-height: 1.5;"></div>
+
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('quickDispenseModal')">إلغاء</button>
+                    <button type="submit" id="qdSubmitBtn" class="btn btn-pos" style="padding: 0.55rem 1.4rem; font-weight: 800;">تأكيد الصرف وخصم المخزون فورياً</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -331,28 +430,47 @@
             loadAprioriRules();
         }
 
+        function getSelectedMedId() {
+            const select = document.getElementById('aiMedSelect');
+            if (select && select.value) return parseInt(select.value);
+            if (allMedicines && allMedicines.length > 0) return allMedicines[0].id;
+            return 1;
+        }
+
         function renderRoleSpecificButtons() {
             const container = document.getElementById('reqBtnContainer');
             if (!container) return;
             const role = (typeof AppAuth !== 'undefined' && AppAuth.getNormalizedRole) ? AppAuth.getNormalizedRole() : null;
             const canManage = (role === 'supervisor' || (typeof AppAuth !== 'undefined' && AppAuth.canManage && AppAuth.canManage()));
             
+            const medId = getSelectedMedId();
+            const currentMed = allMedicines.find(m => m.id === parseInt(medId));
+            const medNameParam = currentMed ? encodeURIComponent(currentMed.name) : '';
+            const restockUrl = `medicine_form.html?id=${medId}&name=${medNameParam}&action=restock`;
+
             if (canManage) {
-                // مدير الصيدلية: إصدار أمر شراء مباشر للمورد وتفادي أي خيار لطلب التوفير
-                const select = document.getElementById('aiMedSelect');
-                const medId = (select && select.value) ? select.value : '';
-                const orderUrl = medId ? `order_create.html?med_id=${medId}` : 'order_create.html';
+                // مدير الصيدلية: إضافة رصيد فعلي للدواء (توريد) + صرف فوري للدواء (تم حذف إصدار أمر شراء للمورد)
                 container.innerHTML = `
-                    <a id="managerPoBtn" href="${orderUrl}" class="btn btn-pos" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn);">
-                        + إصدار أمر شراء للمورد
-                    </a>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <a id="managerRestockBtn" href="${restockUrl}" class="btn btn-pos" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn);" title="إضافة وتوريد رصيد للدواء بالمخزن بشكل فعلي">
+                            إضافة رصيد للدواء
+                        </a>
+                        <button type="button" class="btn btn-secondary" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn); color: var(--primary); border-color: var(--primary);" onclick="openQuickDispenseModal(getSelectedMedId())" title="صرف كمية من هذا الدواء فورياً وخصمها من المخزون">
+                            صرف فوري للدواء
+                        </button>
+                    </div>
                 `;
             } else {
-                // الصيدلي / الكاشير فقط هو من يرفع طلب توفير لمدير الصيدلية
+                // الصيدلي / الكاشير: صرف فوري للدواء + رفع طلب توفير لمدير الصيدلية
                 container.innerHTML = `
-                    <button class="btn btn-pos" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn);" onclick="requestSupplyForSelectedMed()">
-                        + رفع طلب توفير لهذا الدواء للمدير
-                    </button>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-pos" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn);" onclick="openQuickDispenseModal(getSelectedMedId())" title="صرف كمية من هذا الدواء فورياً وخصمها من المخزون">
+                            صرف فوري للدواء
+                        </button>
+                        <button type="button" class="btn btn-secondary" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn);" onclick="requestSupplyForSelectedMed()">
+                            + رفع طلب توفير للمدير
+                        </button>
+                    </div>
                 `;
             }
         }
@@ -380,9 +498,9 @@
             const med = allMedicines.find(m => m.id === parseInt(id));
             if (!med) return;
 
-            const poBtn = document.getElementById('managerPoBtn');
-            if (poBtn) {
-                poBtn.href = `order_create.html?med_id=${med.id}`;
+            const restockBtn = document.getElementById('managerRestockBtn');
+            if (restockBtn) {
+                restockBtn.href = `medicine_form.html?id=${med.id}&name=${encodeURIComponent(med.name)}&action=restock`;
             }
 
             const stock = (med.stock_quantity !== undefined && med.stock_quantity !== null) ? Number(med.stock_quantity) : 0;
@@ -475,31 +593,56 @@
             }
 
             const sorted = [...allMedicines].sort((a, b) => new Date(a.expiry_date || '2099-01-01') - new Date(b.expiry_date || '2099-01-01'));
-            const now = new Date();
+            const todayStr = (typeof AppDate !== 'undefined' && AppDate.getTodayYMD) ? AppDate.getTodayYMD() : new Date().toISOString().substring(0, 10);
+            const now = new Date(todayStr);
 
             tbody.innerHTML = sorted.map((m, idx) => {
-                const exp = new Date(m.expiry_date || '2027-12-31');
+                const expDateStr = String(m.expiry_date || '2027-12-31').substring(0, 10);
+                const exp = new Date(expDateStr);
                 const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+                const isExpired = (diffDays <= 0);
                 
                 let statusBadge = '';
                 let batchCode = `BATCH-${exp.getFullYear()}-${String(m.id).padStart(3, '0')}`;
-                
-                if (diffDays <= 90) {
-                    statusBadge = `<span class="badge badge-danger">أولوية أولى - ينتهي خلال ${diffDays} يوم</span>`;
-                } else if (diffDays <= 180) {
-                    statusBadge = `<span class="badge badge-warning">أولوية ثانية - ينتهي خلال ${Math.ceil(diffDays/30)} أشهر</span>`;
+                let stockCol = '';
+                let actionCol = '';
+
+                if (isExpired) {
+                    statusBadge = `<span class="badge badge-danger" style="font-weight:800;">منتهي الصلاحية (تم شطب الرصيد)</span>`;
+                    stockCol = `<span style="color: var(--danger); font-weight: 800;">0 علبة</span><br><small style="color: var(--danger); font-weight: 700;">(تالف مشطوب)</small>`;
+                    actionCol = `
+                        <div style="display: inline-flex; gap: 0.35rem; align-items: center;">
+                            <span class="badge badge-danger" style="padding: 0.25rem 0.55rem; font-size: 0.74rem; border-radius: var(--radius-btn); font-weight: 700;" title="محظور الصرف نظامياً لانتهاء الصلاحية">محظور الصرف</span>
+                            <a href="medicine_form.html?id=${m.id}&name=${encodeURIComponent(m.name)}&action=restock" class="btn btn-secondary" style="padding: 0.22rem 0.6rem; font-size: 0.76rem; border-radius: var(--radius-btn);" title="إضافة رصيد للدواء بدفعة جديدة">إضافة رصيد للدواء</a>
+                        </div>
+                    `;
                 } else {
-                    statusBadge = `<span class="badge badge-success">صلاحية آمنة (${Math.ceil(diffDays/30)} شهر)</span>`;
+                    if (diffDays <= 90) {
+                        statusBadge = `<span class="badge badge-danger">أولوية أولى - ينتهي خلال ${diffDays} يوم</span>`;
+                    } else if (diffDays <= 180) {
+                        statusBadge = `<span class="badge badge-warning">أولوية ثانية - ينتهي خلال ${Math.ceil(diffDays/30)} أشهر</span>`;
+                    } else {
+                        statusBadge = `<span class="badge badge-success">صلاحية آمنة (${Math.ceil(diffDays/30)} شهر)</span>`;
+                    }
+                    stockCol = `<strong>${m.stock_quantity}</strong> علبة`;
+                    actionCol = `
+                        <div style="display: inline-flex; gap: 0.35rem; align-items: center;">
+                            <button type="button" class="btn btn-pos" style="padding: 0.22rem 0.65rem; font-size: 0.78rem; font-weight: 800; border-radius: var(--radius-btn);" onclick="openQuickDispenseModal(${m.id})">صرف فوري</button>
+                            <a href="order_create.html?med_id=${m.id}&auto_add=1" class="btn btn-secondary" style="padding: 0.22rem 0.6rem; font-size: 0.76rem; border-radius: var(--radius-btn);" title="صرف عبر شاشة نقاط البيع (POS)">POS</a>
+                        </div>
+                    `;
                 }
 
                 return `
                     <tr>
                         <td><code>${batchCode}</code></td>
                         <td><strong>${m.name}</strong><br><small style="color: var(--text-muted);">${m.generic_name || m.category || ''}</small></td>
-                        <td dir="ltr" style="text-align: right;">${m.expiry_date || '2027-12-31'}</td>
-                        <td><strong>${m.stock_quantity}</strong> علبة</td>
+                        <td dir="ltr" style="text-align: right;">${expDateStr}${isExpired ? ' <span class="badge badge-danger" style="font-size:0.68rem; margin-inline-start:3px;">منتهي</span>' : ''}</td>
+                        <td>${stockCol}</td>
                         <td>${statusBadge}</td>
-                        <td><a href="order_create.html" class="btn" style="padding: 3px 10px; font-size: 0.8rem;">صرف فوري</a></td>
+                        <td style="text-align: center;">
+                            ${actionCol}
+                        </td>
                     </tr>
                 `;
             }).join('');
@@ -603,6 +746,180 @@
             showNotification('تم تحديث مؤشرات التنبؤ والتعلم الآلي بنجاح.', 'success');
             loadAprioriRules();
             runAIPrediction();
+        }
+
+        let currentQuickDispenseMed = null;
+
+        function closeModal(id) {
+            const m = document.getElementById(id);
+            if (m) m.classList.remove('active');
+        }
+
+        function openQuickDispenseModal(medId) {
+            const med = allMedicines.find(m => m.id === parseInt(medId));
+            if (!med) {
+                showNotification('الصنف المحدد غير موجود في سجلات الأدوية.', 'danger');
+                return;
+            }
+
+            const todayStr = (typeof AppDate !== 'undefined' && AppDate.getTodayYMD) ? AppDate.getTodayYMD() : new Date().toISOString().substring(0, 10);
+            if (med.expiry_date && String(med.expiry_date).substring(0, 10) <= todayStr) {
+                showNotification(`عذراً، دواء [${med.name}] منتهي الصلاحية (${med.expiry_date}) وتم شطب رصيده بالكامل، ويُمنع صرفه نهائياً وفق اشتراطات السلامة الدوائية.`, 'danger');
+                return;
+            }
+
+            const stock = parseInt(med.stock_quantity || 0);
+            if (stock <= 0) {
+                showNotification(`عذراً، رصيد صنف [${med.name}] نافد بالمخزن (0 علبة). يرجى توريد وإضافة رصيد للدواء أولاً.`, 'warning');
+                return;
+            }
+
+            currentQuickDispenseMed = med;
+            document.getElementById('qdMedId').value = med.id;
+            document.getElementById('qdMedName').textContent = med.name;
+            document.getElementById('qdGeneric').textContent = med.generic_name || '-';
+            document.getElementById('qdPrice').textContent = parseFloat(med.price || 0).toFixed(2);
+            document.getElementById('qdExpiry').textContent = med.expiry_date ? String(med.expiry_date).substring(0, 10) : '2027-12-31';
+
+            const badge = document.getElementById('qdStockBadge');
+            if (badge) {
+                badge.textContent = `الرصيد المتاح: ${stock} علبة`;
+                badge.className = stock <= 15 ? 'badge badge-danger' : 'badge badge-success';
+            }
+
+            const qtyInput = document.getElementById('qdQty');
+            qtyInput.value = 1;
+            qtyInput.max = stock;
+
+            const warning = document.getElementById('qdStockWarning');
+            if (warning) warning.style.display = 'none';
+
+            const submitBtn = document.getElementById('qdSubmitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'تأكيد الصرف وخصم المخزون فورياً';
+            }
+
+            updateQdTotal();
+            document.getElementById('quickDispenseModal').classList.add('active');
+        }
+
+        function updateQdTotal() {
+            if (!currentQuickDispenseMed) return;
+            const qtyInput = document.getElementById('qdQty');
+            const qty = parseInt(qtyInput.value) || 0;
+            const stock = parseInt(currentQuickDispenseMed.stock_quantity || 0);
+            const price = parseFloat(currentQuickDispenseMed.price || 0);
+            const totalEl = document.getElementById('qdTotal');
+            const warning = document.getElementById('qdStockWarning');
+            const submitBtn = document.getElementById('qdSubmitBtn');
+
+            if (totalEl) totalEl.textContent = (qty * price).toFixed(2);
+
+            if (qty > stock) {
+                if (warning) {
+                    warning.innerHTML = `الكمية المطلوبة (${qty} علبة) أكبر من الرصيد المتوفر بالمخزن (${stock} علبة).`;
+                    warning.style.display = 'block';
+                }
+                if (submitBtn) submitBtn.disabled = true;
+            } else if (qty <= 0) {
+                if (warning) {
+                    warning.innerHTML = 'يرجى إدخال كمية صرف صحيحة أكبر من صفر.';
+                    warning.style.display = 'block';
+                }
+                if (submitBtn) submitBtn.disabled = true;
+            } else {
+                if (warning) warning.style.display = 'none';
+                if (submitBtn) submitBtn.disabled = false;
+            }
+        }
+
+        function onQdTypeChange() {
+            const type = document.getElementById('qdType').value;
+            const label = document.getElementById('qdCustomerLabel');
+            const input = document.getElementById('qdCustomer');
+            if (type === 'department_dispense') {
+                label.textContent = 'القسم الطبي المستلم بالمستشفى:';
+                input.value = 'قسم الطوارئ والعناية المركزة';
+            } else {
+                label.textContent = 'اسم المريض / العميل:';
+                input.value = 'عميل نقدي';
+            }
+        }
+
+        async function handleQuickDispenseSubmit(e) {
+            e.preventDefault();
+            if (!currentQuickDispenseMed) return;
+
+            const med = currentQuickDispenseMed;
+            const qtyInput = document.getElementById('qdQty');
+            const qty = parseInt(qtyInput.value) || 1;
+            const stock = parseInt(med.stock_quantity || 0);
+
+            if (qty > stock) {
+                showNotification(`عذراً، الكمية المطلوبة تتجاوز الرصيد المتاح بالمخزن (${stock} علبة).`, 'danger');
+                return;
+            }
+
+            const qdType = document.getElementById('qdType').value;
+            const customerName = document.getElementById('qdCustomer').value.trim() || (qdType === 'department_dispense' ? 'قسم الطوارئ' : 'عميل نقدي');
+            const unitPrice = parseFloat(med.price || 0);
+            const totalPrice = qty * unitPrice;
+
+            const btn = document.getElementById('qdSubmitBtn');
+            const origText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'جاري تسجيل الصرف وخصم المخزون...';
+
+            try {
+                const payload = {
+                    order_type: qdType,
+                    customer_name: customerName,
+                    payment_method: 'cash',
+                    items: [
+                        {
+                            medicine_id: med.id,
+                            name: med.name,
+                            quantity: qty,
+                            unit_price: unitPrice,
+                            total_price: totalPrice
+                        }
+                    ],
+                    total_amount: totalPrice
+                };
+
+                const res = await APIClient.request('orders.php', 'POST', payload);
+                if (res && res.success) {
+                    // خصم الكمية المصروفة فعلياً من الكائن المحلي
+                    med.stock_quantity = Math.max(0, stock - qty);
+
+                    // تحديث مؤشرات الصفحة المباشرة
+                    const select = document.getElementById('aiMedSelect');
+                    if (select && parseInt(select.value) === med.id) {
+                        const valStock = document.getElementById('valStockText');
+                        if (valStock) valStock.textContent = med.stock_quantity;
+                        selectMedicineForAnalysis(med.id);
+                    }
+
+                    // إعادة رسم جدول FEFO
+                    renderFEFOBatches();
+
+                    closeModal('quickDispenseModal');
+
+                    const invNum = res.data?.invoice_number || ('#INV-' + Date.now().toString().slice(-4));
+                    showNotification(`تم بنجاح صرف (${qty} علبة) من [${med.name}]، وخُصمت من المخزون الفعلي (المتبقي: ${med.stock_quantity} علبة). فاتورة رقم: [${invNum}].`, 'success');
+
+                    window.dispatchEvent(new Event('spms_stock_updated'));
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = origText;
+                    showNotification(res?.message || 'حدث خطأ أثناء صرف الدواء.', 'danger');
+                }
+            } catch(err) {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+                showNotification('حدث خطأ أثناء الاتصال بالخادم لصرف الدواء.', 'danger');
+            }
         }
 
         // بدء تشغيل الصفحة وجلب كافة الأدوية ديناميكياً

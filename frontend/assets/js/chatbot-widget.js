@@ -337,8 +337,7 @@
             .replace(/#### (.*)/g, '<strong style="color: var(--text-main); display:block; margin:8px 0 4px 0; font-size: 0.86rem; border-bottom: 1px solid var(--border); padding-bottom: 3px;">$1</strong>')
             .replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--text-main);">$1</strong>')
             .replace(/`([^`]+)`/g, '<code style="background: var(--bg-main); color: var(--accent, #0ea5e9); border: 1px solid var(--border); padding: 1px 5px; border-radius: 6px; font-size: 0.85em;">$1</code>')
-            .replace(/
-/g, '<br>');
+            .replace(/\n/g, '<br>');
 
         return html;
     }})();

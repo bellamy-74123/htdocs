@@ -24,6 +24,39 @@
     }
 })();
 
+// =========================================================================
+// Real-time System Date & Expiry Engine
+// =========================================================================
+class AppDate {
+    static getToday() {
+        return new Date();
+    }
+    static getTodayYMD() {
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+    static getFormattedToday() {
+        const d = new Date();
+        const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+        const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+        return `${days[d.getDay()]}، ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    static isExpired(expiryDateStr) {
+        if (!expiryDateStr) return false;
+        return String(expiryDateStr).substring(0, 10) <= this.getTodayYMD();
+    }
+    static getDaysRemaining(expiryDateStr) {
+        if (!expiryDateStr) return 999;
+        const exp = new Date(String(expiryDateStr).substring(0, 10));
+        const today = new Date(this.getTodayYMD());
+        return Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+    }
+}
+window.AppDate = AppDate;
+
 // Dynamic Auth, Role-Based Access Control (RBAC), and Navigation System
 class AppAuth {
     static getUser() {
@@ -178,7 +211,7 @@ class AppAuth {
         }
 
         navContainer.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
                 <a href="${rootPrefix}" class="logo" style="text-decoration: none;">
                     <span class="hospital-icon-badge" title="الصيدلية الذكية SP">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -189,6 +222,10 @@ class AppAuth {
                     <span>SP</span>
                     <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); border-right: 1.5px solid var(--border); padding-right: 0.5rem; margin-right: 0.2rem;">الصيدلية الذكية</span>
                 </a>
+                <div style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; background: var(--bg-hover); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-main); font-weight: 700;" title="تاريخ اليوم الفعلي للنظام">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>${AppDate.getFormattedToday()}</span>
+                </div>
                 <div style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; background: var(--bg-hover); padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-muted);" title="سحابة Supabase نشطة ومتصلة">
                     <span class="pulse-dot"></span>
                     <span>سحابي</span>
@@ -212,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!document.getElementById('spmsChatFab') && !window.location.pathname.endsWith('chat.html')) {
         const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
         const script = document.createElement('script');
-        script.src = isSubpage ? '../assets/js/chatbot-widget.js' : 'assets/js/chatbot-widget.js';
+        script.src = (isSubpage ? '../assets/js/chatbot-widget.js' : 'assets/js/chatbot-widget.js') + '?v=4.1';
         document.body.appendChild(script);
     }
 });
@@ -256,8 +293,6 @@ function showNotification(msg, type = 'success') {
     }, 3200);
 }
 
-
-
 // =========================================================================
 // Global Suppliers Storage and Management System
 // =========================================================================
@@ -293,7 +328,6 @@ window.saveCustomSupplier = function(sup) {
         return sup;
     }
 };
-
 
 // =========================================================================
 // Internal Medicine Requisition System (Pharmacist -> Pharmacy Manager)
@@ -334,6 +368,10 @@ window.getMedicineRequests = function() {
 window.saveMedicineRequest = function(req) {
     try {
         const list = window.getMedicineRequests();
+        const existing = list.find(r => r.medicine_name === req.medicine_name && (!r.status || r.status === 'قيد المراجعة'));
+        if (existing) {
+            return { error: 'duplicate', existing: existing };
+        }
         const newId = list.length > 0 ? Math.max(...list.map(x => x.id || 0)) + 1 : 1;
         req.id = newId;
         req.created_at = new Date().toISOString().replace('T', ' ').substring(0, 16);

@@ -105,6 +105,9 @@
                     2. طلبات الأدوية الواردة من الصيادلة <span id="reqCountBadge" class="badge badge-danger" style="margin-right: 4px; font-size: 0.72rem;">2</span>
                 </button>
                 <button class="orders-tab-btn" id="btnTabRestock" onclick="switchOrdersTab('restock', this)">3. فواتير التوريد من الموردين</button>
+                <button class="orders-tab-btn" id="btnTabDisposal" onclick="switchOrdersTab('disposal', this)" style="border-color: rgba(220, 38, 38, 0.4);">
+                    4. محاضر إتلاف الأدوية المنتهية الصلاحية <span id="disposalCountBadge" class="badge badge-danger" style="margin-right: 4px; font-size: 0.72rem;">0</span>
+                </button>
             </div>
 
             <!-- TAB 1: Sales Invoices -->
@@ -158,11 +161,39 @@
                 </div>
             </div>
 
+            <!-- TAB 4: Expired Drugs Disposal Records -->
+            <div id="tabContentDisposal" style="display: none;">
+                <div style="background: rgba(220, 38, 38, 0.05); border: 1px solid rgba(220, 38, 38, 0.2); border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                    <div>
+                        <strong style="color: var(--danger); font-size: 0.92rem;">محاضر إتلاف وتسوية الأدوية منتهية الصلاحية (Disposal Logs):</strong>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">توثيق رسمي لكافة الأدوية التي انتهت صلاحيتها وتم خصمها وشطب رصيدها فعلياً من المخزون بموجب اشتراطات السلامة.</div>
+                    </div>
+                    <span id="totalDisposalLoss" class="badge badge-danger" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">إجمالي الهدر المالي: 0.00 ريال</span>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>رقم المحضر</th>
+                                <th>النوع</th>
+                                <th>الجهة المسؤولة</th>
+                                <th>قيمة الهدر المالي (ريال)</th>
+                                <th>التاريخ</th>
+                                <th>حالة المحضر</th>
+                                <th style="text-align: center;">العمليات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="disposalOrdersBody">
+                            <tr><td colspan="7" style="text-align: center; padding: 2rem;">جاري تحميل محاضر الإتلاف...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- TAB 3: Supplier Purchase Restock Invoices (Manager Only) -->
             <div id="tabContentRestock" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                     <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-muted);">فواتير وأوامر الشراء المستلمة من الشركات الموردة:</span>
-                    <a href="order_create.html" class="btn btn-pos" style="font-size: 0.82rem; font-weight: 800;">+ إصدار فاتورة توريد جديدة للمورد</a>
                 </div>
                 <div style="overflow-x: auto;">
                     <table>
@@ -217,7 +248,7 @@
             <form onsubmit="handleSendMedicineRequest(event)">
                                                 <div class="form-group" style="margin-bottom: 0.85rem;">
                     <label style="font-weight: 700; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">الصنف الدوائي المطلوب:</label>
-                    <select id="reqMedSelect" class="form-control" required style="font-weight: 700; padding: 0.6rem;">
+                    <select id="reqMedSelect" class="form-control" required style="font-weight: 700; padding: 0.6rem;" onchange="onReqMedSelectChange()">
                         <option value="">-- اختر الدواء من القائمة --</option>
                     </select>
                 </div>
@@ -230,6 +261,8 @@
                         <div>الرصيد المتاح بالمخزن: <strong id="reqInfoStock" style="color: var(--primary); font-size: 0.95rem;">-</strong></div>
                     </div>
                 </div>
+
+                <div id="reqPendingWarning" class="badge badge-warning" style="display: none; padding: 0.65rem; margin-bottom: 0.85rem; border-radius: 8px; font-size: 0.84rem; text-align: center; line-height: 1.5;"></div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
                     <div class="form-group">
@@ -250,7 +283,7 @@
                 </div>
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('requestMedModal')">إلغاء</button>
-                    <button type="submit" class="btn btn-pos" style="padding: 0.55rem 1.4rem; font-weight: 800;">إرسال الطلب للمدير</button>
+                    <button type="submit" id="reqSubmitBtn" class="btn btn-pos" style="padding: 0.55rem 1.4rem; font-weight: 800;">إرسال الطلب للمدير</button>
                 </div>
             </form>
         </div>
@@ -296,14 +329,18 @@
                 return;
             }
 
+            const allReqs = window.getMedicineRequests ? window.getMedicineRequests() : [];
+            const pendingNames = new Set(allReqs.filter(r => !r.status || r.status === 'قيد المراجعة').map(r => r.medicine_name));
+
             let html = '<option value="">-- اختر الدواء من قائمة أصناف الصيدلية والمخزن (' + cachedMedicines.length + ' صنف) --</option>';
             const sorted = [...cachedMedicines].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
 
             sorted.forEach(m => {
                 const stock = parseInt(m.stock_quantity || 0);
-                const stockTag = stock <= 15 ? `[حرج: ${stock} علبة]` : `[متوفر: ${stock} علبة]`;
+                const isPending = pendingNames.has(m.name);
+                const stockTag = isPending ? `[طلب توفير قائم قيد المراجعة]` : (stock <= 15 ? `[حرج: ${stock} علبة]` : `[متوفر: ${stock} علبة]`);
                 const isSel = (selectedName && (m.name.toLowerCase() === selectedName.toLowerCase() || m.id == selectedName)) ? 'selected' : '';
-                html += `<option value="${m.name}" data-id="${m.id}" data-stock="${stock}" data-generic="${m.generic_name || '-'}" data-category="${m.category || '-'}" ${isSel}>${m.name} ${m.generic_name ? `(${m.generic_name})` : ''} - ${stockTag}</option>`;
+                html += `<option value="${m.name}" data-id="${m.id}" data-stock="${stock}" data-generic="${m.generic_name || '-'}" data-category="${m.category || '-'}" data-pending="${isPending ? 'true' : 'false'}" ${isSel}>${m.name} ${m.generic_name ? `(${m.generic_name})` : ''} - ${stockTag}</option>`;
             });
 
             select.innerHTML = html;
@@ -315,18 +352,26 @@
             const badge = document.getElementById('reqMedStockBadge');
             const banner = document.getElementById('reqMedInfoBanner');
             const prio = document.getElementById('reqPriority');
+            const submitBtn = document.getElementById('reqSubmitBtn');
+            const pendingWarning = document.getElementById('reqPendingWarning');
             if (!select) return;
 
             const opt = select.options[select.selectedIndex];
             if (!opt || !opt.value) {
                 if (badge) badge.textContent = '';
                 if (banner) banner.style.display = 'none';
+                if (pendingWarning) pendingWarning.style.display = 'none';
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'إرسال الطلب للمدير';
+                }
                 return;
             }
 
             const stock = parseInt(opt.dataset.stock || 0);
             const generic = opt.dataset.generic || '-';
             const category = opt.dataset.category || '-';
+            const isPending = (opt.dataset.pending === 'true');
 
             const gEl = document.getElementById('reqInfoGeneric');
             const cEl = document.getElementById('reqInfoCategory');
@@ -339,6 +384,23 @@
                 sEl.style.color = stock <= 15 ? 'var(--danger)' : 'var(--primary)';
             }
             if (banner) banner.style.display = 'block';
+
+            if (isPending) {
+                if (pendingWarning) {
+                    pendingWarning.innerHTML = 'تنبيه: هذا الصنف تم رفع طلب توفير له مسبقاً وهو قيد مراجعة المدير حالياً. طلب الدواء يكون لمرة واحدة فقط حتى يتم اعتماده.';
+                    pendingWarning.style.display = 'block';
+                }
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'تم طلب هذا الدواء مسبقاً (قيد المراجعة)';
+                }
+            } else {
+                if (pendingWarning) pendingWarning.style.display = 'none';
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'إرسال الطلب للمدير';
+                }
+            }
 
             if (stock <= 15) {
                 if (badge) badge.innerHTML = `<span style="color: var(--danger); font-weight: 800;">(مخزون حرج: ${stock} علبة)</span>`;
@@ -378,9 +440,12 @@
             document.getElementById('tabContentSales').style.display = (tabKey === 'sales') ? 'block' : 'none';
             document.getElementById('tabContentRequests').style.display = (tabKey === 'requests') ? 'block' : 'none';
             document.getElementById('tabContentRestock').style.display = (tabKey === 'restock') ? 'block' : 'none';
+            const dispTab = document.getElementById('tabContentDisposal');
+            if (dispTab) dispTab.style.display = (tabKey === 'disposal') ? 'block' : 'none';
 
             if (tabKey === 'requests') loadRequisitions();
             if (tabKey === 'restock') loadRestockOrders();
+            if (tabKey === 'disposal') loadDisposalOrders();
         }
 
         async function loadOrders() {
@@ -411,11 +476,16 @@
 
                 cachedOrders = ordersList;
 
-                // التصنيف الدقيق: فواتير التوريد تخص الموردين بالمبالغ التموينية (500+ ريال أو اسم مورد صريح)
-                const isSupplierRestock = (o) => (o.order_type === 'routine_restock') && 
-                    (parseFloat(o.total_amount || 0) >= 500 || (o.customer_name && (o.customer_name.includes('شركة') || o.customer_name.includes('مورد') || o.customer_name.includes('Supplier'))));
+                // التصنيف الدقيق: فواتير التوريد ومحاضر الإتلاف
+                const isSupplierRestock = (o) => (o.order_type === 'routine_restock');
+                const isExpiredDisposal = (o) => (o.order_type === 'expired_disposal');
 
-                const salesList = cachedOrders.filter(o => !isSupplierRestock(o));
+                const salesList = cachedOrders.filter(o => !isSupplierRestock(o) && !isExpiredDisposal(o));
+                
+                // تحديث شارة محاضر الإتلاف
+                const disposalList = cachedOrders.filter(isExpiredDisposal);
+                const dispBadge = document.getElementById('disposalCountBadge');
+                if (dispBadge) dispBadge.textContent = disposalList.length;
                 const tbody = document.getElementById('salesOrdersBody');
 
                 if (!salesList || salesList.length === 0) {
@@ -467,7 +537,9 @@
 
         function loadRequisitions() {
             const list = window.getMedicineRequests ? window.getMedicineRequests() : [];
-            document.getElementById('reqCountBadge').textContent = list.length;
+            const pendingList = list.filter(r => !r.status || r.status === 'قيد المراجعة');
+            const badgeEl = document.getElementById('reqCountBadge');
+            if (badgeEl) badgeEl.textContent = pendingList.length;
             const tbody = document.getElementById('requisitionsTableBody');
             const isManager = (AppAuth.getNormalizedRole() === 'supervisor');
             
@@ -482,21 +554,34 @@
             }
 
             tbody.innerHTML = list.map(r => {
+                const isApproved = (r.status && (r.status.includes('معتمد') || r.status === 'approved'));
+                const isRejected = (r.status && (r.status.includes('مرفوض') || r.status === 'rejected'));
+
                 let prioBadge = r.priority === 'عاجل' ? '<span class="badge badge-danger">عاجل</span>' : '<span class="badge badge-primary">عادي</span>';
-                let statusBadge = r.status === 'معتمد للتوريد' ? '<span class="badge badge-success">معتمد للتوريد</span>' : '<span class="badge badge-warning">قيد المراجعة</span>';
+                let statusBadge = isApproved 
+                    ? '<span class="badge badge-success" style="font-weight: 700;">معتمد ومورد للمخزون</span>' 
+                    : (isRejected ? '<span class="badge badge-danger" style="font-weight: 700;">مرفوض من الإدارة</span>' : '<span class="badge badge-warning" style="font-weight: 700;">قيد المراجعة</span>');
 
                 let actionHtml = '';
                 if (isManager) {
-                    if (r.status !== 'معتمد للتوريد') {
-                        actionHtml = `
-                            <button class="btn btn-pos" style="padding: 0.2rem 0.55rem; font-size: 0.74rem;" onclick="approveRequisition(${r.id})">اعتماد وتوريد</button>
-                            <button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.74rem; color: var(--danger);" onclick="rejectRequisition(${r.id})">رفض</button>
-                        `;
+                    if (isApproved) {
+                        actionHtml = '<span class="badge badge-success" style="font-size: 0.76rem; padding: 0.25rem 0.6rem; font-weight: 700;">تم الاعتماد والتوريد</span>';
+                    } else if (isRejected) {
+                        actionHtml = '<span class="badge badge-danger" style="font-size: 0.76rem; padding: 0.25rem 0.6rem; font-weight: 700;">مرفوض</span>';
                     } else {
-                        actionHtml = `<span style="font-size: 0.75rem; color: #059669; font-weight: 700;">تم اعتماد التوريد</span>`;
+                        actionHtml = `
+                            <button class="btn btn-pos" style="padding: 0.22rem 0.65rem; font-size: 0.76rem; font-weight: 800;" onclick="approveRequisition(${r.id})">اعتماد وتوريد</button>
+                            <button class="btn btn-secondary" style="padding: 0.22rem 0.65rem; font-size: 0.76rem; color: var(--danger);" onclick="rejectRequisition(${r.id})">رفض</button>
+                        `;
                     }
                 } else {
-                    actionHtml = `<span style="font-size: 0.75rem; color: var(--text-muted);">تم الإرسال للمدير</span>`;
+                    if (isApproved) {
+                        actionHtml = '<span style="font-size: 0.78rem; color: #059669; font-weight: 700;">تم الاعتماد والتوريد</span>';
+                    } else if (isRejected) {
+                        actionHtml = '<span style="font-size: 0.78rem; color: var(--danger); font-weight: 700;">تم رفض الطلب</span>';
+                    } else {
+                        actionHtml = '<span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">بانتظار اعتماد المدير</span>';
+                    }
                 }
 
                 return `
@@ -518,8 +603,7 @@
         }
 
         function loadRestockOrders() {
-            const isSupplierRestock = (o) => (o.order_type === 'routine_restock') && 
-                (parseFloat(o.total_amount || 0) >= 500 || (o.customer_name && (o.customer_name.includes('شركة') || o.customer_name.includes('مورد') || o.customer_name.includes('Supplier'))));
+            const isSupplierRestock = (o) => (o.order_type === 'routine_restock');
 
             const restockList = cachedOrders.filter(o => isSupplierRestock(o));
             const tbody = document.getElementById('restockOrdersBody');
@@ -547,30 +631,55 @@
             }).join('');
         }
 
-        function approveRequisition(id) {
-            window.updateMedicineRequestStatus(id, 'معتمد للتوريد');
+        async function approveRequisition(id) {
+            const list = window.getMedicineRequests ? window.getMedicineRequests() : [];
+            const req = list.find(r => r.id === id);
+            if (!req) return;
+            if (req.status && (req.status.includes('معتمد') || req.status === 'approved')) {
+                showNotification('هذا الطلب تم اعتماده وتوريده مسبقاً للمخزون.', 'info');
+                return;
+            }
+
+            window.updateMedicineRequestStatus(id, 'معتمد ومورد للمخزون');
             loadRequisitions();
-            showNotification('تم اعتماد طلب التوريد بنجاح! يمكن لمدير الصيدلية الآن إدراج الدفعة من المورد.', 'success');
+
+            try {
+                const qty = parseInt(req.requested_qty) || 30;
+                const medName = req.medicine_name;
+                const res = await APIClient.request('medicines.php?action=restock', 'POST', {
+                    medicine_name: medName,
+                    quantity: qty,
+                    unit_price: 25.0,
+                    supplier_name: 'الشركة الوطنية للتموين الطبي'
+                });
+
+                window.dispatchEvent(new Event('spms_stock_updated'));
+
+                // تحديث الفواتير وقائمة الأدوية لإظهار الفاتورة والزيادة مباشرة
+                await loadOrders();
+                await loadMedicinesForRequisition();
+                loadRequisitions();
+
+                const invNumber = res?.data?.invoice?.invoice_number || ('#RESTOCK-' + Date.now().toString().slice(-4));
+                showNotification(`تم اعتماد الطلب بنجاح! زاد رصيد المخزون الفعلي للصنف [${medName}] بمقدار ${qty} علبة، وتولدت فاتورة توريد رسمية برقم [${invNumber}].`, 'success');
+            } catch(err) {
+                showNotification('تم اعتماد طلب التوريد وتحديث السجل.', 'success');
+            }
         }
 
         function rejectRequisition(id) {
+            const list = window.getMedicineRequests ? window.getMedicineRequests() : [];
+            const req = list.find(r => r.id === id);
+            if (!req) return;
+            if (req.status && (req.status.includes('معتمد') || req.status === 'approved')) {
+                showNotification('لا يمكن رفض طلب تم اعتماده وتوريده بالفعل.', 'warning');
+                return;
+            }
             window.updateMedicineRequestStatus(id, 'مرفوض من الإدارة');
             loadRequisitions();
             showNotification('تم رفض الطلب.', 'info');
         }
 
-
-        
-        
-        function populateRequisitionDropdown(selectedName = '') {
-            const select = document.getElementById('reqMedSelect');
-            if (!select) return;
-            const list = (cachedMedicines && cachedMedicines.length > 0) ? cachedMedicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
-
-            select.innerHTML = list.map(m => `
-                <option value="${m.name}" ${selectedName === m.name ? 'selected' : ''}>${m.name} [${m.generic_name || ''}] - رصيد: ${m.stock_quantity} علبة</option>
-            `).join('');
-        }
 
         function openRequestMedModal(preselectedMedName = '') {
             document.getElementById('reqQty').value = '30';
@@ -602,6 +711,14 @@
                 return;
             }
 
+            // منع تكرار طلب نفس الدواء إذا كان مرفوعاً مسبقاً وقيد المراجعة
+            const allReqs = window.getMedicineRequests ? window.getMedicineRequests() : [];
+            const existingPending = allReqs.find(r => r.medicine_name === selectedMedName && (!r.status || r.status === 'قيد المراجعة'));
+            if (existingPending) {
+                showNotification(`يوجد طلب توفير قائم مسبقاً لهذا الدواء برقم (#${existingPending.id}) وهو قيد مراجعة المدير. طلب الدواء يكون لمرة واحدة فقط حتى يتم اعتماده.`, 'warning');
+                return;
+            }
+
             const req = {
                 medicine_name: selectedMedName,
                 requested_qty: parseInt(document.getElementById('reqQty').value) || 1,
@@ -610,7 +727,12 @@
                 requested_by: (AppAuth.getUser() ? AppAuth.getUser().username : 'الصيدلي (كاشير)')
             };
 
-            window.saveMedicineRequest(req);
+            const saved = window.saveMedicineRequest(req);
+            if (saved && saved.error === 'duplicate') {
+                showNotification(`يوجد طلب توفير قائم مسبقاً لهذا الدواء وهو قيد مراجعة المدير.`, 'warning');
+                return;
+            }
+
             closeModal('requestMedModal');
             loadRequisitions();
             showNotification(`تم إرسال طلب توفير دواء [${req.medicine_name}] لمدير الصيدلية بنجاح!`, 'success');
@@ -746,6 +868,41 @@
                 printArea.innerHTML = '';
             }, 1000);
         }
+
+        
+        function loadDisposalOrders() {
+            const tbody = document.getElementById('disposalOrdersBody');
+            if (!tbody) return;
+            const disposalList = cachedOrders.filter(o => o.order_type === 'expired_disposal');
+            const totalLossEl = document.getElementById('totalDisposalLoss');
+            
+            const totalLoss = disposalList.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0);
+            if (totalLossEl) totalLossEl.textContent = `إجمالي الهدر المالي: ${totalLoss.toFixed(2)} ريال`;
+
+            if (disposalList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">لا توجد محاضر إتلاف أدوية منتهية الصلاحية مسجلة حالياً.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = disposalList.map(o => {
+                const invNum = o.invoice_number || `DISPOSAL-#${o.id}`;
+                const dateStr = (o.created_at || o.order_date || '').substring(0, 16);
+                return `
+                    <tr>
+                        <td><strong style="color: var(--danger); font-size: 0.9rem;">${invNum}</strong></td>
+                        <td><span class="badge badge-danger">شطب وإتلاف لانتهاء الصلاحية</span></td>
+                        <td>${o.customer_name || 'لجنة الإتلاف'}</td>
+                        <td><strong style="color: var(--danger); font-size: 0.95rem;">${parseFloat(o.total_amount || 0).toFixed(2)}</strong> ريال</td>
+                        <td style="font-size: 0.84rem; color: var(--text-muted);">${dateStr}</td>
+                        <td><span class="badge badge-danger">تم الخصم والتسوية</span></td>
+                        <td style="text-align: center;">
+                            <button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.78rem; border-radius: var(--radius-btn);" onclick="viewInvoiceDetails(${o.id})">معاينة المحضر</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
 
         window.addEventListener('storage', () => {
             loadOrders();

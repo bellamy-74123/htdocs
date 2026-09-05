@@ -58,9 +58,21 @@ switch ($method) {
                 if ($med) {
                     Medicine::increaseStock($medId, $qty);
                     $med['stock_quantity'] = (int)$med['stock_quantity'] + $qty;
+                    if (!empty($input['expiry_date'])) {
+                        $dbExp = \Core\Database::getInstance()->getConnection();
+                        $upExp = $dbExp->prepare("UPDATE medicines SET expiry_date = :exp WHERE id = :id");
+                        $upExp->execute([':exp' => $input['expiry_date'], ':id' => $medId]);
+                        $med['expiry_date'] = $input['expiry_date'];
+                    }
                 }
             } else if (!empty($medName)) {
                 $med = Medicine::increaseStockByName($medName, $qty);
+                if ($med && !empty($input['expiry_date'])) {
+                    $dbExp = \Core\Database::getInstance()->getConnection();
+                    $upExp = $dbExp->prepare("UPDATE medicines SET expiry_date = :exp WHERE id = :id");
+                    $upExp->execute([':exp' => $input['expiry_date'], ':id' => $med['id']]);
+                    $med['expiry_date'] = $input['expiry_date'];
+                }
             }
 
             if (!$med) {

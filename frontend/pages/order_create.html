@@ -186,15 +186,11 @@
                             <select id="invType" class="form-control" onchange="handleInvoiceTypeChange()">
                                 <option value="patient_sale">مبيعات وصرف نقدي للمرضى</option>
                                 <option value="department_dispense">صرف دوائي لأقسام المستشفى</option>
-                                <option value="routine_restock">توريد مشتريات من مورد</option>
                             </select>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <label id="customerLabel" style="font-size: 0.82rem; font-weight: 700;">اسم العميل / المريض</label>
                             <input type="text" id="customerName" class="form-control" placeholder="اسم المريض أو الجهة المستلمة..." value="عميل نقدي">
-                            <select id="supplierSelect" class="form-control" style="display: none; font-weight: 700;">
-                                <!-- Populated dynamically from approved suppliers catalog -->
-                            </select>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <label style="font-size: 0.82rem; font-weight: 700;">طريقة الدفع</label>
@@ -414,16 +410,9 @@
             const type = document.getElementById('invType').value;
             const custLabel = document.getElementById('customerLabel');
             const custInput = document.getElementById('customerName');
-            const supSelect = document.getElementById('supplierSelect');
 
-            if (type === 'routine_restock') {
-                custLabel.textContent = 'الشركة الموردة المعتمدة (من دليل الموردين)';
-                custInput.style.display = 'none';
-                supSelect.style.display = 'block';
-                populateSuppliersSelect();
-            } else if (type === 'department_dispense') {
+            if (type === 'department_dispense') {
                 custLabel.textContent = 'القسم الطبي المستلم';
-                supSelect.style.display = 'none';
                 custInput.style.display = 'block';
                 custInput.placeholder = 'مثال: قسم العناية المركزة، العمليات...';
                 if (!custInput.value || custInput.value.includes('عميل') || custInput.value.includes('شركة')) {
@@ -432,7 +421,6 @@
             } else {
                 // patient_sale
                 custLabel.textContent = 'اسم المريض / العميل';
-                supSelect.style.display = 'none';
                 custInput.style.display = 'block';
                 custInput.placeholder = 'اسم المريض أو عميل نقدي...';
                 if (!custInput.value || custInput.value.includes('قسم') || custInput.value.includes('شركة')) {
@@ -469,11 +457,16 @@
             }
 
             const sel = document.getElementById('medSelect');
+            const todayStr = (typeof AppDate !== 'undefined' && AppDate.getTodayYMD) ? AppDate.getTodayYMD() : new Date().toISOString().substring(0, 10);
+
             if (sel) {
                 if (availableMeds && availableMeds.length > 0) {
-                    sel.innerHTML = availableMeds.map(m => `
-                        <option value="${m.id}">${m.name} — (${parseFloat(m.price || 0).toFixed(2)} ريال) - رصيد: ${m.stock_quantity}</option>
-                    `).join('');
+                    sel.innerHTML = availableMeds.map(m => {
+                        const isExp = (m.expiry_date && String(m.expiry_date).substring(0, 10) <= todayStr);
+                        const expTag = isExp ? ' [منتهي الصلاحية - محظور الصرف]' : '';
+                        const stockTag = isExp ? 'رصيد: 0 (مشطوب)' : `رصيد: ${m.stock_quantity}`;
+                        return `<option value="${m.id}" data-expired="${isExp ? 'true' : 'false'}">${m.name} — (${parseFloat(m.price || 0).toFixed(2)} ريال) - ${stockTag}${expTag}</option>`;
+                    }).join('');
                     updateMedSelectionInfo();
                 } else {
                     sel.innerHTML = '<option value="">لا توجد أدوية مسجلة</option>';
@@ -509,6 +502,12 @@
             const qty = parseInt(document.getElementById('itemQty').value) || 1;
             const med = availableMeds.find(m => m.id === medId);
             if (!med) return;
+
+            const todayStr = (typeof AppDate !== 'undefined' && AppDate.getTodayYMD) ? AppDate.getTodayYMD() : new Date().toISOString().substring(0, 10);
+            if (med.expiry_date && String(med.expiry_date).substring(0, 10) <= todayStr) {
+                alert(`عذراً، دواء «${med.name}» منتهي الصلاحية (${med.expiry_date}) وتم شطب رصيده بالكامل، ومحظور صرفه نهائياً وفق اشتراطات الهيئة العامة للغذاء والدواء.`);
+                return;
+            }
 
             const invType = document.getElementById('invType').value;
             if (invType !== 'routine_restock' && qty > med.stock_quantity) {
@@ -1002,17 +1001,7 @@
     
 
         function enforceRoleRestrictions() {
-            const role = AppAuth.getNormalizedRole() || 'staff';
-            const invTypeSelect = document.getElementById('invType');
-
-            if (role !== 'supervisor' && invTypeSelect) {
-                // Pharmacist (cashier) has NO restock or supplier invoice permissions
-                const restockOpt = invTypeSelect.querySelector('option[value="routine_restock"]');
-                if (restockOpt) restockOpt.remove();
-                if (invTypeSelect.value === 'routine_restock') {
-                    invTypeSelect.value = 'patient_sale';
-                }
-            }
+            // Supplier restock invoices are managed exclusively via inventory & requisitions
         }
 
         document.addEventListener('DOMContentLoaded', async () => {

@@ -2639,14 +2639,64 @@ function savePersistentOrders(orders) {
 }
 
 function getPersistentMedicines() {
+    let meds = null;
     try {
         const stored = localStorage.getItem('spms_persisted_medicines');
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) meds = parsed;
         }
     } catch (e) {}
-    return DEMO_MEDICINES;
+    if (!meds) {
+        meds = (typeof DEMO_MEDICINES !== 'undefined') ? [...DEMO_MEDICINES] : [];
+    }
+
+    // تسوية شطب الأدوية منتهية الصلاحية تلقائياً وخصمها من الرصيد الفعلي
+    const todayStr = (typeof AppDate !== 'undefined' && AppDate.getTodayYMD) ? AppDate.getTodayYMD() : new Date().toISOString().substring(0, 10);
+    let changed = false;
+
+    meds.forEach(m => {
+        if (m.expiry_date && String(m.expiry_date).substring(0, 10) <= todayStr && (parseInt(m.stock_quantity) || 0) > 0) {
+            const expiredQty = parseInt(m.stock_quantity);
+            m.stock_quantity = 0;
+            m.is_expired = true;
+            changed = true;
+
+            try {
+                const currentOrders = getPersistentOrders();
+                const now = new Date();
+                const totalLoss = parseFloat((expiredQty * (parseFloat(m.price) || 20)).toFixed(2));
+                const disposalOrder = {
+                    id: currentOrders.length > 0 ? Math.max(...currentOrders.map(o => o.id || 0)) + 1 : 101,
+                    invoice_number: `DISPOSAL-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${m.id}`,
+                    order_type: 'expired_disposal',
+                    customer_name: 'لجنة إتلاف الأدوية المنتهية الصلاحية',
+                    payment_method: 'loss',
+                    payment_status: 'معدوم / تالف',
+                    status: 'completed',
+                    subtotal: totalLoss,
+                    total_amount: totalLoss,
+                    created_at: now.toISOString().replace('T', ' ').substring(0, 19),
+                    notes: `محضر شطب وإتلاف صنف منتهي الصلاحية [${m.name}] - خصم كامل الرصيد (${expiredQty} علبة) لانتهاء الصلاحية في ${m.expiry_date}`,
+                    items: [{
+                        medicine_id: m.id,
+                        name: m.name,
+                        generic_name: m.generic_name || '',
+                        quantity: expiredQty,
+                        unit_price: parseFloat(m.price) || 20,
+                        total_price: totalLoss
+                    }]
+                };
+                currentOrders.unshift(disposalOrder);
+                savePersistentOrders(currentOrders);
+            } catch (err) {}
+        }
+    });
+
+    if (changed) {
+        savePersistentMedicines(meds);
+    }
+    return meds;
 }
 
 function savePersistentMedicines(meds) {
@@ -2777,6 +2827,70 @@ class APIClient {
 
         if (endpoint.includes('medicines.php')) {
             const currentMeds = getPersistentMedicines();
+            if (method === 'POST' && endpoint.includes('action=restock') && data) {
+                const medId = parseInt(data.medicine_id);
+                const medName = data.medicine_name || '';
+                const qty = parseInt(data.quantity) || 0;
+                const unitPrice = parseFloat(data.unit_price) || 20.0;
+                const supplierName = data.supplier_name || 'الشركة الوطنية للتموين الطبي';
+
+                let med = currentMeds.find(m => m.id === medId || m.name === medName);
+                if (med) {
+                    med.stock_quantity = (parseInt(med.stock_quantity) || 0) + qty;
+                    savePersistentMedicines(currentMeds);
+                }
+
+                // إنشاء فاتورة توريد شحنة دائمة
+                const currentOrders = getPersistentOrders();
+                const now = new Date();
+                const orderId = currentOrders.length > 0 ? Math.max(...currentOrders.map(o => o.id || 0)) + 1 : 101;
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const hh = String(now.getHours()).padStart(2, '0');
+                const min = String(now.getMinutes()).padStart(2, '0');
+                const ss = String(now.getSeconds()).padStart(2, '0');
+                const invNum = data.invoice_number || `RESTOCK-${yyyy}${mm}${dd}-${hh}${min}${ss}`;
+                const totalAmount = parseFloat((qty * unitPrice).toFixed(2));
+
+                const restockOrder = {
+                    id: orderId,
+                    invoice_number: invNum,
+                    order_type: 'routine_restock',
+                    customer_name: supplierName,
+                    payment_method: 'card',
+                    payment_status: 'مسدد',
+                    status: 'completed',
+                    subtotal: totalAmount,
+                    total_amount: totalAmount,
+                    created_at: now.toISOString().replace('T', ' ').substring(0, 19),
+                    notes: `توريد وتحديث رصيد الصنف [${med ? med.name : medName}] بإضافة ${qty} علبة`,
+                    items: [
+                        {
+                            medicine_id: med ? med.id : (medId || 1),
+                            name: med ? med.name : medName,
+                            generic_name: med ? med.generic_name : '',
+                            quantity: qty,
+                            unit_price: unitPrice,
+                            total_price: totalAmount
+                        }
+                    ]
+                };
+
+                currentOrders.unshift(restockOrder);
+                savePersistentOrders(currentOrders);
+
+                return {
+                    status: 200,
+                    success: true,
+                    message: `تم توريد الصنف وزيادة رصيد المخزون الفعلي بمقدار ${qty} علبة وإصدار فاتورة التوريد بنجاح.`,
+                    data: {
+                        medicine: med,
+                        invoice: restockOrder
+                    }
+                };
+            }
+
             if (method === 'POST' && data) {
                 const newMed = {
                     id: currentMeds.length + 1,
@@ -2784,10 +2898,50 @@ class APIClient {
                 };
                 currentMeds.unshift(newMed);
                 savePersistentMedicines(currentMeds);
+
+                // إنشاء فاتورة توريد أولي إن كان الرصيد أكبر من صفر
+                const initialStock = parseInt(data.stock_quantity) || 0;
+                if (initialStock > 0) {
+                    const currentOrders = getPersistentOrders();
+                    const now = new Date();
+                    const orderId = currentOrders.length > 0 ? Math.max(...currentOrders.map(o => o.id || 0)) + 1 : 101;
+                    const yyyy = now.getFullYear();
+                    const mm = String(now.getMonth() + 1).padStart(2, '0');
+                    const invNum = `RESTOCK-${yyyy}${mm}-${String(orderId).padStart(3, '0')}`;
+                    const price = parseFloat(data.price) || 20.0;
+                    const totalAmount = parseFloat((initialStock * price).toFixed(2));
+                    
+                    const initialOrder = {
+                        id: orderId,
+                        invoice_number: invNum,
+                        order_type: 'routine_restock',
+                        customer_name: data.supplier_name || 'الشركة الوطنية للتموين الطبي',
+                        payment_method: 'card',
+                        payment_status: 'مسدد',
+                        status: 'completed',
+                        subtotal: totalAmount,
+                        total_amount: totalAmount,
+                        created_at: now.toISOString().replace('T', ' ').substring(0, 19),
+                        notes: `إدراج وتوريد أولي للصنف [${data.name}] برصيد ${initialStock} علبة`,
+                        items: [
+                            {
+                                medicine_id: newMed.id,
+                                name: newMed.name,
+                                generic_name: newMed.generic_name || '',
+                                quantity: initialStock,
+                                unit_price: price,
+                                total_price: totalAmount
+                            }
+                        ]
+                    };
+                    currentOrders.unshift(initialOrder);
+                    savePersistentOrders(currentOrders);
+                }
+
                 return {
                     status: 201,
                     success: true,
-                    message: 'تم حفظ الدواء بنجاح.',
+                    message: 'تم حفظ الدواء وإصدار فاتورة التوريد بنجاح.',
                     data: newMed
                 };
             }
@@ -3165,6 +3319,7 @@ APIClient.normalizeArabic = AIEngine.normalizeArabic;
 if (typeof window !== 'undefined') {
     window.APIClient = APIClient;
     window.AIEngine = AIEngine;
+    window.MASTER_FORMULARY = MASTER_FORMULARY;
     window.DEMO_MEDICINES = DEMO_MEDICINES;
     window.DEMO_ORDERS = DEMO_ORDERS;
     window.DEMO_SUPPLIERS = DEMO_SUPPLIERS;

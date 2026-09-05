@@ -30,13 +30,13 @@
             </div>
 
             <form id="pharmacyStockForm" onsubmit="handleSavePharmacyMedicine(event)">
-                                                                <!-- 1. Selection from Master Inventory Catalog -->
+                                                <!-- 1. Selection from Master Inventory Catalog -->
                 <div class="form-group" style="margin-bottom: 1rem; background: var(--bg-hover); padding: 1rem; border-radius: var(--radius); border: 1.5px solid var(--border);">
                     <label style="font-weight: 800; font-size: 0.9rem; color: var(--primary); margin-bottom: 0.35rem; display: block;">
-                        اختيار الدواء من دليل المخزون المركزي (121 دواء معتمد):
+                        قائمة الأدوية المتاحة للتوريد أو إضافة الرصيد:
                     </label>
                     <select id="selectFromFormulary" class="form-control" required style="font-weight: 700;" onchange="onFormularyDrugSelected(this.value)">
-                        <option value="">-- اختر الدواء بالاسم التجاري أو العلمي من المخزون --</option>
+                        <option value="">-- اختر الدواء المطلوب من قائمة الأدوية أو دليل المخزون --</option>
                     </select>
                     <div id="selectedDrugInfoBanner" style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--text-muted); display: none;"></div>
                 </div>
@@ -44,7 +44,7 @@
                 <!-- 2. Auto-populated details from Master Inventory -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
                     <div class="form-group">
-                        <label style="font-weight: 700; font-size: 0.85rem;">اسم الصنف التجاري (من المخزون)</label>
+                        <label style="font-weight: 700; font-size: 0.85rem;">اسم الصنف التجاري</label>
                         <input type="text" id="medName" class="form-control" readonly required style="background: var(--bg-hover); font-weight: 800;">
                     </div>
                     <div class="form-group">
@@ -65,18 +65,14 @@
                 </div>
 
                 <!-- 3. Pharmacy Active Batch Details (Quantity & Expiry) -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 0.85rem;">
                     <div class="form-group">
-                        <label style="font-weight: 700; font-size: 0.85rem;">الكمية المستلمة بالصيدلية</label>
+                        <label id="stockLabel" style="font-weight: 700; font-size: 0.85rem;">الكمية المستلمة (المراد إضافتها للرصيد)</label>
                         <input type="number" id="medStock" class="form-control" value="50" min="1" required style="font-weight: 800;">
                     </div>
                     <div class="form-group">
-                        <label style="font-weight: 700; font-size: 0.85rem;">موقع الرف بالصيدلية</label>
-                        <input type="text" id="medLocation" class="form-control" value="رف A1" placeholder="مثال: رف B2">
-                    </div>
-                    <div class="form-group">
-                        <label style="font-weight: 700; font-size: 0.85rem;">تاريخ الصلاحية (FEFO)</label>
-                        <input type="date" id="medExpiry" class="form-control" value="2027-10-15" required>
+                        <label style="font-weight: 700; font-size: 0.85rem;">تاريخ الصلاحية الجديد (FEFO)</label>
+                        <input type="date" id="medExpiry" class="form-control" value="2028-09-05" required>
                     </div>
                 </div>
 
@@ -87,7 +83,7 @@
                     </select>
                 </div>
 
-                <button type="submit" id="saveBtn" class="btn btn-pos" style="width: 100%; padding: 0.65rem; font-size: 0.95rem; font-weight: 800;">حفظ وإدراج الصنف في قسم الأدوية</button>
+                <button type="submit" id="saveBtn" class="btn btn-pos" style="width: 100%; padding: 0.65rem; font-size: 0.95rem; font-weight: 800;">اعتماد التوريد وزيادة المخزون الفعلي وإصدار الفاتورة</button>
             </form>
             <div id="formMsg" style="margin-top: 1rem; text-align: center;"></div>
         </div>
@@ -96,65 +92,380 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../assets/js/supabase-client.js"></script>
     <script src="../assets/js/api.js"></script>
-    <script src="../assets/js/app.js"></script>
+    <script src="../assets/js/app.js?v=4.2"></script>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const editId = urlParams.get('id');
+        const actionParam = urlParams.get('action');
+        const medNameParam = urlParams.get('med') || urlParams.get('name');
+        let registeredMedicines = [];
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!AppAuth.requireAuth(['supervisor', 'staff'])) return;
+
+            // 1. استرجاع قائمة الأدوية المسجلة مسبقاً لمطابقة الأرصدة
+            try {
+                const res = await APIClient.request('medicines.php');
+                if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+                    registeredMedicines = res.data;
+                }
+            } catch(e) {
+                console.warn('Could not load medicines from backend:', e);
+            }
+
+            if (!registeredMedicines || registeredMedicines.length === 0) {
+                if (typeof DEMO_MEDICINES !== 'undefined' && Array.isArray(DEMO_MEDICINES)) {
+                    registeredMedicines = [...DEMO_MEDICINES];
+                }
+            }
+
+            // 2. ملء القوائم المنسدلة
             populateFormularyDropdown();
             populateSuppliersDropdown();
-            if (editId) {
-                document.getElementById('formTitle').textContent = `تعديل رصيد وسعر الصنف #${editId}`;
-                loadEditMedicineData(editId);
+
+            // 3. ضبط تاريخ الصلاحية الافتراضي المستقبلي (سنتان للأمام)
+            const today = (window.AppDate && AppDate.getToday) ? AppDate.getToday() : new Date();
+            const futureYear = today.getFullYear() + 2;
+            const mStr = String(today.getMonth() + 1).padStart(2, '0');
+            const dStr = String(today.getDate()).padStart(2, '0');
+            const defaultFutureExpiry = `${futureYear}-${mStr}-${dStr}`;
+            const expiryInput = document.getElementById('medExpiry');
+            if (expiryInput && !expiryInput.value) {
+                expiryInput.value = defaultFutureExpiry;
+            }
+
+            // 4. إذا تم النقر على إضافة رصيد لدواء محدد أو تم تمرير معرفه أو اسمه
+            if (editId || medNameParam) {
+                selectMedicineByIdOrName(editId, medNameParam, actionParam);
             }
         });
 
         function populateSuppliersDropdown() {
             const select = document.getElementById('medSupplier');
             if (!select) return;
-            const list = window.getSuppliersList ? window.getSuppliersList() : [];
-            select.innerHTML = list.map(s => `<option value="${s.id}">${s.name} (${s.address || 'مورد معتمد'})</option>`).join('');
+            const list = (window.getSuppliersList ? window.getSuppliersList() : []) || [];
+            if (list.length > 0) {
+                select.innerHTML = list.map(s => `<option value="${s.id}">${s.name} (${s.address || 'مورد معتمد'})</option>`).join('');
+            } else {
+                select.innerHTML = `
+                    <option value="1">الشركة الوطنية للتموين الطبي (الرياض)</option>
+                    <option value="2">مستودعات الخليج للأدوية (جدة)</option>
+                    <option value="3">سقالة للرعاية الصحية المتقدمة</option>
+                `;
+            }
         }
 
-        
-        
-        
-        
         function populateFormularyDropdown() {
             const select = document.getElementById('selectFromFormulary');
             if (!select) return;
-            select.innerHTML = '<option value="">-- اختر الدواء بالاسم التجاري أو العلمي من المخزون --</option>';
-            const list = (typeof MASTER_FORMULARY !== 'undefined' ? MASTER_FORMULARY : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []));
+            select.innerHTML = '<option value="">-- اختر الدواء المطلوب من قائمة الأدوية أو دليل المخزون --</option>';
 
-            list.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d.id;
-                opt.textContent = `${d.name} -- [${d.generic_name || d.generic_name_ar || ''}] (${d.category})`;
-                select.appendChild(opt);
-            });
+            // المجموعة الأولى: أدوية الصيدلية المسجلة والمعتمدة
+            if (registeredMedicines && registeredMedicines.length > 0) {
+                const groupReg = document.createElement('optgroup');
+                groupReg.label = 'أدوية الصيدلية المسجلة (لإضافة وتوريد الرصيد)';
+
+                registeredMedicines.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = String(m.id);
+                    const stock = (m.stock_quantity !== undefined && m.stock_quantity !== null) ? parseInt(m.stock_quantity) : 0;
+                    const stockTag = (stock === 0) ? ' [الرصيد: 0 علبة - نافد]' : (stock <= 15 ? ` [الرصيد: ${stock} علبة - حرج]` : ` [الرصيد: ${stock} علبة]`);
+                    opt.textContent = `${m.name} -- [${m.generic_name || ''}] (${m.category || 'عام'})${stockTag}`;
+                    groupReg.appendChild(opt);
+                });
+                select.appendChild(groupReg);
+            }
+
+            // المجموعة الثانية: دليل المخزون المركزي العام (أصناف إضافية غير مدرجة بعد)
+            const formList = (typeof MASTER_FORMULARY !== 'undefined' && Array.isArray(MASTER_FORMULARY)) ? MASTER_FORMULARY : [];
+            const registeredNames = new Set(registeredMedicines.map(m => (m.name || '').trim().toLowerCase()));
+
+            const unaddedFormulary = formList.filter(f => !registeredNames.has((f.name || '').trim().toLowerCase()));
+            if (unaddedFormulary.length > 0) {
+                const groupForm = document.createElement('optgroup');
+                groupForm.label = 'دليل المخزون المركزي العام (أصناف جديدة للإدراج والتوريد)';
+
+                unaddedFormulary.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = 'form_' + f.id;
+                    opt.textContent = `${f.name} -- [${f.generic_name || f.generic_name_ar || ''}] (${f.category || 'عام'}) [صنف جديد]`;
+                    groupForm.appendChild(opt);
+                });
+                select.appendChild(groupForm);
+            }
         }
-    
-    
-    
+
+        function selectMedicineByIdOrName(targetId, targetName, action) {
+            const select = document.getElementById('selectFromFormulary');
+            if (!select) return;
+
+            let matchedVal = null;
+            let matchedMed = null;
+
+            // 1. المطابقة عبر رقم المعرف أولاً
+            if (targetId) {
+                const reg = registeredMedicines.find(m => String(m.id) === String(targetId));
+                if (reg) {
+                    matchedMed = reg;
+                    matchedVal = String(reg.id);
+                } else {
+                    const formList = (typeof MASTER_FORMULARY !== 'undefined') ? MASTER_FORMULARY : [];
+                    const formMed = formList.find(f => String(f.id) === String(targetId));
+                    if (formMed) {
+                        matchedMed = formMed;
+                        matchedVal = 'form_' + formMed.id;
+                    }
+                }
+            }
+
+            // 2. المطابقة عبر الاسم إن لم يتم العثور بالمعرف
+            if (!matchedMed && targetName) {
+                const cleanName = targetName.trim().toLowerCase();
+                const reg = registeredMedicines.find(m => {
+                    const mName = (m.name || '').trim().toLowerCase();
+                    return mName === cleanName || mName.includes(cleanName) || cleanName.includes(mName);
+                });
+                if (reg) {
+                    matchedMed = reg;
+                    matchedVal = String(reg.id);
+                } else {
+                    const formList = (typeof MASTER_FORMULARY !== 'undefined') ? MASTER_FORMULARY : [];
+                    const formMed = formList.find(f => {
+                        const fName = (f.name || '').trim().toLowerCase();
+                        return fName === cleanName || fName.includes(cleanName) || cleanName.includes(fName);
+                    });
+                    if (formMed) {
+                        matchedMed = formMed;
+                        matchedVal = 'form_' + formMed.id;
+                    }
+                }
+            }
+
+            // 3. تحديد الخيار في القائمة المنسدلة وتعبئة النموذج مباشرة
+            if (matchedVal) {
+                select.value = matchedVal;
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === matchedVal) {
+                        select.selectedIndex = i;
+                        break;
+                    }
+                }
+                onFormularyDrugSelected(select.value, action);
+            } else if (targetId) {
+                // محاولة الجلب المباشر من الخادم في حال كان الصنف غير موجود في المصفوفة المحلية
+                loadEditMedicineData(targetId, action);
+            }
         }
 
-        function handleSavePharmacyMedicine(e) {
-            e.preventDefault();
-            const medName = document.getElementById('medName').value.trim();
-            const stock = document.getElementById('medStock').value;
-            const price = document.getElementById('medPrice').value;
+        async function loadEditMedicineData(id, action = null) {
+            try {
+                let med = null;
+                const res = await APIClient.request(`medicines.php?id=${id}`);
+                if (res && res.success && res.data) {
+                    med = res.data;
+                } else {
+                    med = registeredMedicines.find(m => String(m.id) === String(id));
+                }
 
-            if (!medName) {
-                showNotification('يرجى اختيار الدواء من دليل المخزون أولاً.', 'warning');
+                if (!med) return;
+
+                if (!registeredMedicines.some(m => String(m.id) === String(med.id))) {
+                    registeredMedicines.unshift(med);
+                    populateFormularyDropdown();
+                }
+
+                const select = document.getElementById('selectFromFormulary');
+                if (select) {
+                    select.value = String(med.id);
+                    for (let i = 0; i < select.options.length; i++) {
+                        if (select.options[i].value === String(med.id)) {
+                            select.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                onFormularyDrugSelected(String(med.id), action);
+            } catch (e) {
+                console.error('Error loading medicine by id:', e);
+            }
+        }
+
+        function onFormularyDrugSelected(drugId, action = null) {
+            const currentAction = action || actionParam;
+            if (!drugId) {
+                document.getElementById('medName').value = '';
+                document.getElementById('medGeneric').value = '';
+                document.getElementById('medCategory').value = '';
+                document.getElementById('selectedDrugInfoBanner').style.display = 'none';
                 return;
             }
 
-            const msg = document.getElementById('formMsg');
-            msg.innerHTML = `<div class="badge badge-success" style="padding: 10px; font-size: 0.9rem;">تم تسجيل [${medName}] برصيد (${stock} علبة) وسعر (${price} ريال) في قسم الأدوية بنجاح! جاري التوجيه...</div>`;
-            setTimeout(() => {
-                window.location.href = 'medicines.html';
-            }, 1200);
+            let drug = null;
+            let isRegistered = false;
+
+            if (String(drugId).startsWith('form_')) {
+                const fId = String(drugId).replace('form_', '');
+                const formList = (typeof MASTER_FORMULARY !== 'undefined' && Array.isArray(MASTER_FORMULARY)) ? MASTER_FORMULARY : [];
+                drug = formList.find(d => String(d.id) === String(fId));
+            } else {
+                drug = registeredMedicines.find(m => String(m.id) === String(drugId));
+                isRegistered = true;
+            }
+
+            if (!drug) return;
+
+            document.getElementById('medName').value = drug.name || '';
+            document.getElementById('medGeneric').value = drug.generic_name || drug.generic_name_ar || '';
+            document.getElementById('medCategory').value = drug.category || '';
+            
+            const price = parseFloat(drug.price || 25.0);
+            document.getElementById('medPrice').value = price.toFixed(2);
+
+            const today = (window.AppDate && AppDate.getToday) ? AppDate.getToday() : new Date();
+            const futureYear = today.getFullYear() + 2;
+            const mStr = String(today.getMonth() + 1).padStart(2, '0');
+            const dStr = String(today.getDate()).padStart(2, '0');
+            const defaultFutureExpiry = `${futureYear}-${mStr}-${dStr}`;
+
+            if (currentAction === 'restock') {
+                document.getElementById('medStock').value = '50';
+                document.getElementById('medExpiry').value = defaultFutureExpiry;
+                document.getElementById('formTitle').textContent = `إضافة رصيد للدواء: ${drug.name}`;
+                const btn = document.getElementById('saveBtn');
+                if (btn) btn.textContent = 'اعتماد التوريد وزيادة رصيد المخزون الفعلي';
+            } else if (isRegistered) {
+                document.getElementById('medStock').value = (drug.stock_quantity !== undefined) ? drug.stock_quantity : '50';
+                document.getElementById('medExpiry').value = drug.expiry_date ? String(drug.expiry_date).substring(0, 10) : defaultFutureExpiry;
+                document.getElementById('formTitle').textContent = `تعديل رصيد وسعر الصنف: ${drug.name}`;
+                const btn = document.getElementById('saveBtn');
+                if (btn) btn.textContent = 'حفظ التعديلات في قسم الأدوية';
+            } else {
+                document.getElementById('medStock').value = '50';
+                document.getElementById('medExpiry').value = defaultFutureExpiry;
+                document.getElementById('formTitle').textContent = `إدراج صنف جديد وتوريده: ${drug.name}`;
+                const btn = document.getElementById('saveBtn');
+                if (btn) btn.textContent = 'حفظ وإدراج الصنف في قسم الأدوية';
+            }
+
+            // بطاقة التأكيد والعرض المباشر للدواء
+            const banner = document.getElementById('selectedDrugInfoBanner');
+            banner.style.display = 'block';
+
+            let stockText = '';
+            let stockBadge = '';
+            let restockNotice = '';
+
+            if (isRegistered) {
+                const curStock = (drug.stock_quantity !== undefined && drug.stock_quantity !== null) ? parseInt(drug.stock_quantity) : 0;
+                if (curStock === 0) {
+                    stockBadge = '<span class="badge badge-danger" style="font-weight: 800; font-size: 0.8rem;">رصيد نافد (0 علبة)</span>';
+                    stockText = 'الرصيد الفعلي الحالي بالمستودع نافد تماماً (0 علبة).';
+                } else if (curStock <= 15) {
+                    stockBadge = `<span class="badge badge-danger" style="font-weight: 800; font-size: 0.8rem;">رصيد حرج (${curStock} علبة)</span>`;
+                    stockText = `الرصيد الفعلي الحالي بالمستودع منخفض (${curStock} علبة).`;
+                } else {
+                    stockBadge = `<span class="badge badge-success" style="font-weight: 800; font-size: 0.8rem;">متوفر (${curStock} علبة)</span>`;
+                    stockText = `الرصيد الفعلي الحالي بالمستودع: ${curStock} علبة.`;
+                }
+                restockNotice = `تم تحديد الدواء بنجاح من القائمة. إدخال الكمية المستلمة واعتماد التوريد سيقوم بزيادة الرصيد الفعلي في قاعدة البيانات تلقائياً وإصدار فاتورة مشتريات رسمية.`;
+            } else {
+                stockBadge = '<span class="badge badge-warning" style="font-weight: 800; font-size: 0.8rem;">صنف جديد غير مدرج</span>';
+                stockText = 'هذا الصنف معتمد في المخزون المركزي وسيتم إدراجه لأول مرة في الصيدلية.';
+                restockNotice = `سيتم فتح سجل جديد للصنف وإيداع الكمية الأولية في رصيد الصيدلية وإصدار فاتورة التوريد.`;
+            }
+
+            banner.innerHTML = `
+                <div style="background: rgba(2, 132, 199, 0.08); border: 1.5px solid var(--primary); border-radius: var(--radius); padding: 0.85rem; margin-top: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.3rem;">
+                        <span style="color: var(--primary); font-weight: 900; font-size: 0.95rem;">تم تحديد الدواء: ${drug.name}</span>
+                        ${stockBadge}
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.35rem;">
+                        <strong>المادة الفعالة:</strong> ${drug.generic_name || drug.generic_name_ar || '-'} | <strong>المجموعة:</strong> ${drug.category || 'عام'}
+                    </div>
+                    <div style="font-size: 0.84rem; color: var(--text-main); font-weight: 700; line-height: 1.5;">
+                        ${stockText} ${restockNotice}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function handleSavePharmacyMedicine(e) {
+            e.preventDefault();
+            const medName = document.getElementById('medName').value.trim();
+            const medGeneric = document.getElementById('medGeneric').value.trim();
+            const medCategory = document.getElementById('medCategory').value.trim();
+            const stock = parseInt(document.getElementById('medStock').value) || 0;
+            const price = parseFloat(document.getElementById('medPrice').value) || 25.0;
+            const expiry = document.getElementById('medExpiry').value;
+            const supplierSelect = document.getElementById('medSupplier');
+            const supplierName = supplierSelect ? supplierSelect.options[supplierSelect.selectedIndex]?.text.split('(')[0].trim() : 'الشركة الوطنية للتموين الطبي';
+
+            if (!medName) {
+                showNotification('يرجى اختيار الدواء من القائمة أولاً.', 'warning');
+                return;
+            }
+
+            if (stock <= 0) {
+                showNotification('يرجى تحديد كمية أكبر من صفر للتوريد وإضافة الرصيد.', 'warning');
+                return;
+            }
+
+            const btn = document.getElementById('saveBtn');
+            const originalBtnText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'جاري حفظ التوريد وزيادة المخزون الفعلي...';
+
+            try {
+                // التحقق هل الصنف مسجل مسبقاً في قاعدة البيانات
+                let existing = registeredMedicines.find(m => m.name === medName || (editId && String(m.id) === String(editId)));
+
+                let res = null;
+                if (existing) {
+                    // توريد وزيادة رصيد المخزون الفعلي وتحديث الصلاحية إن وجدت وإصدار فاتورة التوريد
+                    res = await APIClient.request('medicines.php?action=restock', 'POST', {
+                        medicine_id: existing.id,
+                        medicine_name: medName,
+                        quantity: stock,
+                        unit_price: price,
+                        expiry_date: expiry,
+                        supplier_name: supplierName
+                    });
+                } else {
+                    // إضافة صنف جديد مع توريده الأولي وإصدار فاتورة التوريد
+                    res = await APIClient.request('medicines.php', 'POST', {
+                        name: medName,
+                        generic_name: medGeneric,
+                        category: medCategory,
+                        price: price,
+                        stock_quantity: stock,
+                        expiry_date: expiry,
+                        supplier_name: supplierName
+                    });
+                }
+
+                window.dispatchEvent(new Event('spms_stock_updated'));
+
+                const invNumber = res?.data?.invoice?.invoice_number || ('#RESTOCK-' + Date.now().toString().slice(-4));
+                const msg = document.getElementById('formMsg');
+                msg.innerHTML = `
+                    <div class="badge badge-success" style="padding: 12px; font-size: 0.92rem; line-height: 1.6; border-radius: var(--radius); text-align: center; width: 100%;">
+                        تم بنجاح توريد وإضافة رصيد للصنف [${medName}] بمقدار (${stock} علبة) وسعر (${price.toFixed(2)} ريال).<br>
+                        تم توليد فاتورة توريد رسمية برقم [<strong>${invNumber}</strong>]. جاري توجيهك لقسم الأدوية...
+                    </div>
+                `;
+
+                showNotification(`تم زيادة رصيد [${medName}] بمقدار ${stock} علبة وتوليد فاتورة التوريد بنجاح!`, 'success');
+
+                setTimeout(() => {
+                    window.location.href = 'medicines.html';
+                }, 1400);
+
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnText;
+                showNotification('حدث خطأ أثناء حفظ التوريد، يرجى المحاولة ثانية.', 'danger');
+            }
         }
     </script>
 </body>
