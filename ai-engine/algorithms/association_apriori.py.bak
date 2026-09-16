@@ -1,0 +1,163 @@
+# -*- coding: utf-8 -*-
+"""
+خوارزمية تحليل سلة المشتريات والتوصيات الدوائية (Apriori Algorithm)
+تقوم بتعدين قواعد الترافق واستخراج العلاقات الدوائية التلقائية من فواتير الصرف:
+- حساب الدعم (Support)
+- حساب الثقة (Confidence)
+- حساب الرفع (Lift)
+"""
+
+from collections import defaultdict
+from itertools import combinations
+from typing import List, Dict, Tuple, Any
+
+class AprioriEngine:
+    """
+    محرك خوارزمية Apriori للتعلم الآلي غير الخاضع للإشراف (Unsupervised Rule Mining)
+    يستخرج الأنماط المتكررة بين الأدوية والمكملات من سجلات الصرف والفواتير.
+    """
+
+    def __init__(self, min_support: float = 0.05, min_confidence: float = 0.5):
+        self.min_support = min_support
+        self.min_confidence = min_confidence
+        self.rules: List[Dict[str, Any]] = []
+        self.item_support: Dict[str, float] = {}
+        self.transaction_count: int = 0
+        
+        # المعجم الإرشادي للعلاقات الطبية السريرية
+        self.clinical_explanations = {
+            ("أوجمنتين", "بروبيوتيك"): "حماية الجهاز الهضمي والفلورا المعوية من الاضطرابات الناتجة عن المضادات الحيوية.",
+            ("أموكسيل", "فيتامين سي"): "تعزيز المناعة وتسريع الشفاء المصاحب لعلاج العدوى البكتيرية.",
+            ("فولتارين", "أوميبرازول"): "حماية جدار المعدة من الآثار الجانبية لمضادات الالتهاب غير الستيرويدية.",
+            ("بروفين", "أوميبرازول"): "واقي للمعدة لمنع القرحة والحموضة أثناء استخدام المسكنات.",
+            ("ميتفورمين", "فيتامين ب12"): "تعويض النقص المتوقع في فيتامين B12 الناتج عن الاستخدام المزمن للميتفورمين.",
+            ("ليبيتور", "إنزيم كيو 10"): "تخفيف آلام العضلات المصاحبة لأدوية الستاتين الخافضة للكوليسترول.",
+            ("بنادول", "فيتامين سي"): "تخفيف أعراض نزلات البرد والزكام ودعم الاستجابة المناعية."
+        }
+
+        # بذر أولي بسجلات صرف واقعية
+        self._seed_default_transactions()
+
+    def _seed_default_transactions(self):
+        """قاعدة بيانات أولية لفواتير الصرف لتدريب النموذج الأساسي."""
+        default_baskets = [
+            ["أوجمنتين 1 جم", "بروبيوتيك (Probiotic Lactobacillus)", "بنادول إكسترا 500 مجم"],
+            ["أوجمنتين 1 جم", "بروبيوتيك (Probiotic Lactobacillus)"],
+            ["أوجمنتين 1 جم", "بروبيوتيك (Probiotic Lactobacillus)", "فيتامين سي 1000 مجم"],
+            ["فولتارين 50 مجم", "أوميبرازول 20 مجم"],
+            ["فولتارين 50 مجم", "أوميبرازول 20 مجم", "بنادول إكسترا 500 مجم"],
+            ["بروفين 400 مجم", "أوميبرازول 20 مجم"],
+            ["ميتفورمين 500 مجم", "فيتامين ب12 (1000mcg)", "جلوكوفاج 500 مجم"],
+            ["ميتفورمين 500 مجم", "فيتامين ب12 (1000mcg)"],
+            ["أموكسيل 500 مجم", "فيتامين سي 1000 مجم"],
+            ["أموكسيل 500 مجم", "فيتامين سي 1000 مجم", "بنادول إكسترا 500 مجم"],
+            ["ليبيتور 20 مجم", "إنزيم كيو 10 (CoQ10)"],
+            ["بنادول إكسترا 500 مجم", "فيتامين سي 1000 مجم"]
+        ]
+        self.fit(default_baskets)
+
+    def fit(self, transactions: List[List[str]]) -> List[Dict[str, Any]]:
+        """
+        تدريب وتعدين القواعد من قائمة سلال المشتريات.
+        """
+        if not transactions:
+            return self.rules
+
+        self.transaction_count = len(transactions)
+        item_counts = defaultdict(int)
+        pair_counts = defaultdict(int)
+
+        # 1. حساب تكرار الأصناف الفردية (L1)
+        for basket in transactions:
+            unique_items = set(basket)
+            for item in unique_items:
+                item_counts[item] += 1
+            # 2. حساب تكرار الأزواج (L2)
+            for item1, item2 in combinations(sorted(unique_items), 2):
+                pair_counts[(item1, item2)] += 1
+
+        self.item_support = {item: count / self.transaction_count for item, count in item_counts.items()}
+
+        # 3. توليد قواعد الترافق وحساب المقاييس (Support, Confidence, Lift)
+        min_count = max(1, int(self.min_support * self.transaction_count))
+        generated_rules = []
+
+        for (item1, item2), pair_count in pair_counts.items():
+            if pair_count < min_count:
+                continue
+
+            pair_support = pair_count / self.transaction_count
+            supp1 = self.item_support.get(item1, 0.0001)
+            supp2 = self.item_support.get(item2, 0.0001)
+
+            # قاعدة 1: item1 -> item2
+            conf1 = pair_support / supp1
+            lift1 = conf1 / supp2 if supp2 > 0 else 1.0
+
+            if conf1 >= self.min_confidence:
+                explanation = self._get_explanation(item1, item2)
+                generated_rules.append({
+                    "antecedent": item1,
+                    "consequent": item2,
+                    "support": round(pair_support, 3),
+                    "confidence": round(conf1, 3),
+                    "lift": round(lift1, 2),
+                    "explanation": explanation
+                })
+
+            # قاعدة 2: item2 -> item1
+            conf2 = pair_support / supp2
+            lift2 = conf2 / supp1 if supp1 > 0 else 1.0
+
+            if conf2 >= self.min_confidence:
+                explanation = self._get_explanation(item2, item1)
+                generated_rules.append({
+                    "antecedent": item2,
+                    "consequent": item1,
+                    "support": round(pair_support, 3),
+                    "confidence": round(conf2, 3),
+                    "lift": round(lift2, 2),
+                    "explanation": explanation
+                })
+
+        # ترتيب القواعد تنازلياً حسب درجة الرفع (Lift) ثم الثقة (Confidence)
+        generated_rules.sort(key=lambda r: (r["lift"], r["confidence"]), reverse=True)
+        self.rules = generated_rules
+        return self.rules
+
+    def get_recommendations_for_item(self, item_name: str) -> List[Dict[str, Any]]:
+        """الحصول على التوصيات المقترنة بدواء معين بدعم كامل للأسماء العربية والإنجليزية."""
+        item_lower = item_name.lower().strip()
+        aliases = {
+            "augmentin": "أوجمنتين",
+            "amoxil": "أموكسيل",
+            "panadol": "بنادول",
+            "voltaren": "فولتارين",
+            "brufen": "بروفين",
+            "ibuprofen": "بروفين",
+            "metformin": "ميتفورمين",
+            "lipitor": "ليبيتور",
+            "glucophage": "جلوكوفاج"
+        }
+        
+        target_terms = [item_lower]
+        for en, ar in aliases.items():
+            if en in item_lower:
+                target_terms.append(ar.lower())
+            elif ar in item_lower:
+                target_terms.append(en.lower())
+
+        matched = []
+        for r in self.rules:
+            ant_lower = r["antecedent"].lower()
+            if any(t in ant_lower or ant_lower in t for t in target_terms):
+                matched.append(r)
+        return matched
+
+    def _get_explanation(self, antecedent: str, consequent: str) -> str:
+        """استخراج التفسير الطبي السريري المناسب للعلاقة."""
+        for (k1, k2), exp in self.clinical_explanations.items():
+            if (k1.lower() in antecedent.lower() and k2.lower() in consequent.lower()) or \
+               (k2.lower() in antecedent.lower() and k1.lower() in consequent.lower()):
+                return exp
+        return f"ترافق متكرر في فواتير الصرف مع زيادة طلب بنسبة {int(100 * self.item_support.get(consequent, 0.2))}%."

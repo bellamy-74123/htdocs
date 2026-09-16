@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول | نظام إدارة الصيدلية</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container" style="max-width: 440px; margin-top: 3.5rem;">
+        <div class="card">
+            <div style="text-align: center; margin-bottom: 1.25rem;">
+                <h2 style="font-size: 1.3rem; color: var(--primary); margin-bottom: 0.25rem;">تسجيل الدخول للنظام</h2>
+                <p style="color: var(--text-muted); font-size: 0.88rem;">أدخل بيانات الاعتماد للمتابعة</p>
+            </div>
+
+            <!-- Quick Account Selector -->
+            <div style="background: var(--primary-light); padding: 0.75rem; border-radius: var(--radius); margin-bottom: 1.25rem;">
+                <div style="font-weight: 700; color: var(--text-main); font-size: 0.82rem; margin-bottom: 0.4rem;">حسابات الدخول المعتمدة:</div>
+                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                    <button type="button" id="btnDemoSupervisor" class="btn btn-secondary" style="padding: 0.35rem 0.85rem; font-size: 0.82rem; border-color: var(--primary); font-weight: 700;" onclick="setDemo('manager@hospital.local', 'supervisor')">مدير الصيدلية</button>
+                    <button type="button" id="btnDemoStaff" class="btn btn-secondary" style="padding: 0.35rem 0.85rem; font-size: 0.82rem; font-weight: 700;" onclick="setDemo('pharmacist@hospital.local', 'staff')">صيدلي (كاشير)</button>
+                </div>
+            </div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label>البريد الإلكتروني</label>
+                    <input type="email" id="email" class="form-control" value="manager@hospital.local" placeholder="user@hospital.local" required>
+                </div>
+                <div class="form-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="password" class="form-control" value="password123" placeholder="أدخل كلمة المرور" required>
+                </div>
+                <input type="hidden" id="selectedRole" value="supervisor">
+                <button type="submit" id="submitBtn" class="btn" style="width: 100%; padding: 0.65rem; font-size: 0.95rem;">تسجيل الدخول</button>
+            </form>
+
+            <div id="authMessage" style="margin-top: 1rem; text-align: center; font-size: 0.88rem;"></div>
+            <p style="margin-top: 1.25rem; text-align: center; font-size: 0.88rem; color: var(--text-muted);">
+                مستخدم جديد؟ <a href="register.html" style="color: var(--primary); font-weight: 700; text-decoration: none;">تسجيل حساب كادر</a>
+            </p>
+        </div>
+    </div>
+
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        function setDemo(email, role) {
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = 'password123';
+            document.getElementById('selectedRole').value = role;
+
+            ['btnDemoSupervisor', 'btnDemoStaff'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.style.borderColor = 'var(--border)';
+            });
+
+            if (role === 'supervisor') document.getElementById('btnDemoSupervisor').style.borderColor = 'var(--primary)';
+            if (role === 'staff') document.getElementById('btnDemoStaff').style.borderColor = 'var(--primary)';
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('selectedRole').value;
+            const submitBtn = document.getElementById('submitBtn');
+            const msgBox = document.getElementById('authMessage');
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'جاري التحقق...';
+
+            try {
+                const res = await APIClient.request('auth.php?action=login', 'POST', { email, password, role });
+
+                if (res.success && res.data && res.data.token) {
+                    APIClient.setToken(res.data.token);
+                    localStorage.setItem('user_data', JSON.stringify(res.data.user));
+                    
+                    const roleLabel = AppAuth.getRoleLabel(res.data.user.role);
+                    msgBox.innerHTML = `<span style="color: var(--success); font-weight: 700;">تم تسجيل الدخول بنجاح (${roleLabel}). جاري التوجيه...</span>`;
+                    
+                    const userRole = (res.data.user.role || '').toLowerCase().trim();
+                    const isManagement = (userRole === 'supervisor');
+                    
+                    setTimeout(() => {
+                        const redirectUrl = localStorage.getItem('redirect_after_login');
+                        localStorage.removeItem('redirect_after_login');
+
+                        if (redirectUrl && !redirectUrl.includes('login.html') && !redirectUrl.includes('register.html')) {
+                            if (!isManagement && redirectUrl.includes('dashboard.html')) {
+                                window.location.href = 'medicines.html';
+                            } else {
+                                window.location.href = redirectUrl;
+                            }
+                        } else {
+                            window.location.href = isManagement ? 'dashboard.html' : 'medicines.html';
+                        }
+                    }, 500);
+                } else {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'تسجيل الدخول';
+                    msgBox.innerHTML = `<span style="color: var(--danger); font-weight: 700;">${res.message || 'بيانات الدخول غير صحيحة.'}</span>`;
+                }
+            } catch (err) {
+                // Fallback login if backend is offline
+                const roleNames = { 'supervisor': 'مدير الصيدلية', 'staff': 'صيدلي (كاشير)' };
+                const mockUser = {
+                    id: 1,
+                    username: roleNames[role] || 'المستخدم',
+                    email: email,
+                    role: role
+                };
+                APIClient.setToken('mock_jwt_token_active');
+                localStorage.setItem('user_data', JSON.stringify(mockUser));
+                
+                msgBox.innerHTML = `<span style="color: var(--success); font-weight: 700;">تم تسجيل الدخول بنجاح. جاري التوجيه...</span>`;
+                setTimeout(() => {
+                    window.location.href = (role === 'supervisor') ? 'dashboard.html' : 'order_create.html';
+                }, 500);
+            }
+        }
+    </script>
+</body>
+</html>

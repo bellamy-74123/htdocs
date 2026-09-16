@@ -1,0 +1,586 @@
+// API Client for Pharmacy System (Resilient Multi-Port REST Architecture)
+const CANDIDATE_API_URLS = [
+    'http://localhost:8080/api',
+    'http://127.0.0.1:8080/api',
+    'http://localhost/charming-planck/backend/api',
+    'http://localhost/backend/api'
+];
+
+let ACTIVE_API_URL = localStorage.getItem('active_api_url') || CANDIDATE_API_URLS[0];
+const AI_ENGINE_URL = 'http://127.0.0.1:8000/api';
+
+// Demo in-memory fallback dataset
+const DEMO_MEDICINES = [
+    { id: 1, name: "أوجمنتين 1 جم (Augmentin 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 45.00, stock_quantity: 85, min_stock_alert: 25, expiry_date: "2026-11-30" },
+    { id: 2, name: "كلافوكس 1 جم (Clavox 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 32.00, stock_quantity: 40, min_stock_alert: 20, expiry_date: "2026-10-15" },
+    { id: 3, name: "ميجاموكس 1 جم (Megamox 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 28.00, stock_quantity: 60, min_stock_alert: 20, expiry_date: "2026-12-10" },
+    { id: 4, name: "كيورام 1 جم (Curam 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 30.00, stock_quantity: 55, min_stock_alert: 15, expiry_date: "2027-03-20" },
+    { id: 5, name: "جلمنتين 2X 1 جم (Julmentin 2X 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 26.50, stock_quantity: 75, min_stock_alert: 20, expiry_date: "2027-01-15" },
+    { id: 6, name: "أموكسيل 500 مجم (Amoxil 500mg)", generic_name: "أموكسيسيلين (Amoxicillin)", category: "مضاد حيوي (Antibiotic)", price: 18.00, stock_quantity: 120, min_stock_alert: 30, expiry_date: "2027-02-28" },
+    { id: 7, name: "هيموكس 500 مجم (H-Mox 500mg)", generic_name: "أموكسيسيلين (Amoxicillin)", category: "مضاد حيوي (Antibiotic)", price: 12.00, stock_quantity: 95, min_stock_alert: 25, expiry_date: "2026-12-31" },
+    { id: 8, name: "أموكسيدار 500 مجم (Amoxydar 500mg)", generic_name: "أموكسيسيلين (Amoxicillin)", category: "مضاد حيوي (Antibiotic)", price: 14.50, stock_quantity: 110, min_stock_alert: 20, expiry_date: "2027-04-10" },
+    { id: 9, name: "زيثروماكس 500 مجم (Zithromax 500mg)", generic_name: "أزيثرومايسين (Azithromycin)", category: "مضاد حيوي (Antibiotic)", price: 55.00, stock_quantity: 35, min_stock_alert: 15, expiry_date: "2026-11-20" },
+    { id: 10, name: "أزوميسين 500 مجم (Azomycin 500mg)", generic_name: "أزيثرومايسين (Azithromycin)", category: "مضاد حيوي (Antibiotic)", price: 28.00, stock_quantity: 70, min_stock_alert: 20, expiry_date: "2027-05-15" },
+    { id: 11, name: "زيسروسين 500 مجم (Zisrocin 500mg)", generic_name: "أزيثرومايسين (Azithromycin)", category: "مضاد حيوي (Antibiotic)", price: 22.00, stock_quantity: 80, min_stock_alert: 20, expiry_date: "2027-06-30" },
+    { id: 12, name: "سيبروباي 500 مجم (Ciprobay 500mg)", generic_name: "سيبروفلوكساسين (Ciprofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 42.00, stock_quantity: 45, min_stock_alert: 15, expiry_date: "2026-10-30" },
+    { id: 13, name: "سيبرودار 500 مجم (Ciprodar 500mg)", generic_name: "سيبروفلوكساسين (Ciprofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 19.00, stock_quantity: 90, min_stock_alert: 25, expiry_date: "2027-07-20" },
+    { id: 14, name: "تافانيك 500 مجم (Tavanic 500mg)", generic_name: "ليفوفلوكساسين (Levofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 68.00, stock_quantity: 25, min_stock_alert: 10, expiry_date: "2027-08-15" },
+    { id: 15, name: "ليفودار 500 مجم (Levodar 500mg)", generic_name: "ليفوفلوكساسين (Levofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 34.00, stock_quantity: 50, min_stock_alert: 15, expiry_date: "2027-09-10" },
+    { id: 16, name: "سيفودوكس 200 مجم (Cefodox 200mg)", generic_name: "سيفبودوكسيم (Cefpodoxime)", category: "مضاد حيوي (Antibiotic)", price: 48.00, stock_quantity: 38, min_stock_alert: 12, expiry_date: "2026-12-15" },
+    { id: 17, name: "كلاسيد 500 مجم (Klacid 500mg)", generic_name: "كلاريثرومايسين (Clarithromycin)", category: "مضاد حيوي (Antibiotic)", price: 62.00, stock_quantity: 30, min_stock_alert: 10, expiry_date: "2027-03-30" },
+    { id: 18, name: "فلاجيل 500 مجم (Flagyl 500mg)", generic_name: "ميترونيدازول (Metronidazole)", category: "مضاد حيوي ومطهر معوي (Antibiotic & Antiprotozoal)", price: 11.00, stock_quantity: 160, min_stock_alert: 30, expiry_date: "2027-10-25" },
+    { id: 19, name: "بنادول إكسترا 500 مجم (Panadol Extra 500mg)", generic_name: "باراسيتامول + كافيين (Paracetamol + Caffeine)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 12.00, stock_quantity: 250, min_stock_alert: 50, expiry_date: "2027-06-15" },
+    { id: 20, name: "بنادول أدفانس 500 مجم (Panadol Advance 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 9.50, stock_quantity: 210, min_stock_alert: 40, expiry_date: "2027-08-10" },
+    { id: 21, name: "أدول 500 مجم (Adol 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 7.50, stock_quantity: 190, min_stock_alert: 35, expiry_date: "2026-09-30" },
+    { id: 22, name: "فيفادول 500 مجم (Fevadol 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 6.00, stock_quantity: 240, min_stock_alert: 45, expiry_date: "2027-11-20" },
+    { id: 23, name: "باراسيتامول فارما 500 مجم (Paracetamol Pharma 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 5.00, stock_quantity: 180, min_stock_alert: 30, expiry_date: "2027-08-20" },
+    { id: 24, name: "ريفانين 500 مجم (Revanin 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 5.50, stock_quantity: 150, min_stock_alert: 25, expiry_date: "2027-04-15" },
+    { id: 25, name: "بروفين 400 مجم (Brufen 400mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 15.00, stock_quantity: 130, min_stock_alert: 25, expiry_date: "2027-01-10" },
+    { id: 26, name: "بروفين 600 مجم (Brufen 600mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 19.50, stock_quantity: 85, min_stock_alert: 20, expiry_date: "2027-02-15" },
+    { id: 27, name: "سابوفين 400 مجم (Sapofen 400mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 11.00, stock_quantity: 140, min_stock_alert: 30, expiry_date: "2026-11-25" },
+    { id: 28, name: "إيبوفيل 400 مجم (Ibupophil 400mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 9.00, stock_quantity: 105, min_stock_alert: 20, expiry_date: "2027-05-30" },
+    { id: 29, name: "فولتارين 50 مجم (Voltaren 50mg)", generic_name: "ديكلوفيناك الصوديوم (Diclofenac Sodium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 22.00, stock_quantity: 75, min_stock_alert: 20, expiry_date: "2026-08-30" },
+    { id: 30, name: "ديكلوجين 50 مجم (Diclogen 50mg)", generic_name: "ديكلوفيناك الصوديوم (Diclofenac Sodium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 11.00, stock_quantity: 95, min_stock_alert: 20, expiry_date: "2026-12-05" },
+    { id: 31, name: "ديفيدو 75 مجم كبسول (Divido 75mg)", generic_name: "ديكلوفيناك الصوديوم (Diclofenac Sodium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 28.00, stock_quantity: 50, min_stock_alert: 15, expiry_date: "2027-07-15" },
+    { id: 32, name: "كتافلام 50 مجم (Cataflam 50mg)", generic_name: "ديكلوفيناك البوتاسيوم (Diclofenac Potassium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 24.00, stock_quantity: 80, min_stock_alert: 20, expiry_date: "2027-03-25" },
+    { id: 33, name: "رابيدوس 50 مجم (Rapidus 50mg)", generic_name: "ديكلوفيناك البوتاسيوم (Diclofenac Potassium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 16.50, stock_quantity: 90, min_stock_alert: 20, expiry_date: "2027-01-30" },
+    { id: 34, name: "أولفين 50 مجم (Olfen 50mg)", generic_name: "ديكلوفيناك البوتاسيوم (Diclofenac Potassium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 14.00, stock_quantity: 65, min_stock_alert: 15, expiry_date: "2026-10-20" },
+    { id: 35, name: "سيلبركس 200 مجم (Celebrex 200mg)", generic_name: "سيليكوكسيب (Celecoxib)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 65.00, stock_quantity: 40, min_stock_alert: 10, expiry_date: "2027-09-15" },
+    { id: 36, name: "سيلكوكس 200 مجم (Celcox 200mg)", generic_name: "سيليكوكسيب (Celecoxib)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 32.00, stock_quantity: 60, min_stock_alert: 15, expiry_date: "2027-10-30" },
+    { id: 37, name: "موبيك 15 مجم (Mobic 15mg)", generic_name: "ميلوكسيكام (Meloxicam)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 38.00, stock_quantity: 45, min_stock_alert: 15, expiry_date: "2027-06-20" },
+    { id: 38, name: "بونستان فورت 500 مجم (Ponstan Forte 500mg)", generic_name: "حمض الميفيناميك (Mefenamic Acid)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 18.00, stock_quantity: 85, min_stock_alert: 20, expiry_date: "2027-04-30" },
+    { id: 39, name: "سباسموبان 10 مجم (Spasmopan 10mg)", generic_name: "هيوسين بوتيل بروميد (Hyoscine Butylbromide)", category: "مسكن لتقلصات الجهاز الهضمي (Antispasmodic)", price: 13.50, stock_quantity: 110, min_stock_alert: 25, expiry_date: "2027-08-15" },
+    { id: 40, name: "أوميبرازول 20 مجم (Omeprazole 20mg)", generic_name: "أوميبرازول (Omeprazole)", category: "أدوية الجهاز الهضمي والمعدة (Gastrointestinal / PPI)", price: 20.00, stock_quantity: 140, min_stock_alert: 30, expiry_date: "2027-04-15" },
+    { id: 41, name: "نيكسيوم 40 مجم (Nexium 40mg)", generic_name: "إيزوميبرازول (Esomeprazole)", category: "أدوية الجهاز الهضمي والمعدة (Gastrointestinal / PPI)", price: 72.00, stock_quantity: 55, min_stock_alert: 15, expiry_date: "2027-11-30" },
+    { id: 42, name: "كونترولوك 40 مجم (Controloc 40mg)", generic_name: "بانتوبرازول (Pantoprazole)", category: "أدوية الجهاز الهضمي والمعدة (Gastrointestinal / PPI)", price: 54.00, stock_quantity: 65, min_stock_alert: 15, expiry_date: "2027-07-25" }
+];
+
+const DEMO_SUPPLIERS = [
+    { id: 1, name: 'شركة فارما العالمية للتوريدات الطبية', contact_person: 'د. أحمد', phone: '+967-770000001', email: 'info@globalpharma.com', address: 'صنعاء - شارع الزبيري' },
+    { id: 2, name: 'مؤسسة الحياة لتوزيع أدوية المستشفيات', contact_person: 'سارة علي', phone: '+967-770000002', email: 'contact@medlife.com', address: 'عدن - المنطقة الحرة' },
+    { id: 3, name: 'شركة الصحة والتقنية الحيوية', contact_person: 'م. خالد', phone: '+967-770000003', email: 'sales@biotech.com', address: 'تعز - شارع الجامعة' }
+];
+
+const DEMO_ORDERS = [
+    {
+        id: 101,
+        invoice_number: 'INV-202608-001',
+        order_type: 'department_dispense',
+        customer_name: 'قسم الطوارئ والعناية المركزة',
+        payment_method: 'credit',
+        payment_status: 'مسدد',
+        status: 'completed',
+        subtotal: 135.00,
+        discount: 0.00,
+        tax_amount: 0.00,
+        total_amount: 135.00,
+        created_at: '2026-08-24 10:30:00',
+        items: [
+            { medicine_id: 1, name: 'أوجمنتين 1 جم (Augmentin 1g)', quantity: 2, unit_price: 45.00, total_price: 90.00 },
+            { medicine_id: 29, name: 'فولتارين 50 مجم (Voltaren 50mg)', quantity: 2, unit_price: 22.00, total_price: 45.00 }
+        ]
+    },
+    {
+        id: 102,
+        invoice_number: 'INV-202608-002',
+        order_type: 'patient_sale',
+        customer_name: 'عميل نقدي / مريض عيادات خارجية',
+        payment_method: 'cash',
+        payment_status: 'مسدد',
+        status: 'completed',
+        subtotal: 76.50,
+        discount: 5.00,
+        tax_amount: 0.00,
+        total_amount: 71.50,
+        created_at: '2026-08-23 15:45:00',
+        items: [
+            { medicine_id: 19, name: 'بنادول إكسترا 500 مجم (Panadol Extra 500mg)', quantity: 3, unit_price: 12.00, total_price: 36.00 },
+            { medicine_id: 40, name: 'أوميبرازول 20 مجم (Omeprazole 20mg)', quantity: 2, unit_price: 20.00, total_price: 40.50 }
+        ]
+    },
+    {
+        id: 103,
+        invoice_number: 'INV-202608-003',
+        order_type: 'routine_restock',
+        customer_name: 'شركة فارما العالمية للتوريدات الطبية',
+        payment_method: 'card',
+        payment_status: 'مسدد',
+        status: 'completed',
+        subtotal: 1250.00,
+        discount: 0.00,
+        tax_amount: 0.00,
+        total_amount: 1250.00,
+        created_at: '2026-08-22 09:15:00',
+        items: [
+            { medicine_id: 6, name: 'أموكسيل 500 مجم (Amoxil 500mg)', quantity: 50, unit_price: 18.00, total_price: 900.00 },
+            { medicine_id: 35, name: 'سيلبركس 200 مجم (Celebrex 200mg)', quantity: 10, unit_price: 65.00, total_price: 350.00 }
+        ]
+    }
+];
+
+// LocalStorage Persistence Layer for Orders and Inventory
+function getPersistentOrders() {
+    try {
+        const stored = localStorage.getItem('spms_persisted_orders');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch (e) {}
+    return DEMO_ORDERS;
+}
+
+function savePersistentOrders(orders) {
+    try {
+        localStorage.setItem('spms_persisted_orders', JSON.stringify(orders));
+    } catch (e) {}
+}
+
+function getPersistentMedicines() {
+    try {
+        const stored = localStorage.getItem('spms_persisted_medicines');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch (e) {}
+    return DEMO_MEDICINES;
+}
+
+function savePersistentMedicines(meds) {
+    try {
+        localStorage.setItem('spms_persisted_medicines', JSON.stringify(meds));
+    } catch (e) {}
+}
+
+class APIClient {
+    static getToken() {
+        return localStorage.getItem('jwt_token');
+    }
+
+    static setToken(token) {
+        localStorage.setItem('jwt_token', token);
+    }
+
+    static clearToken() {
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('user_data');
+    }
+
+    static async request(endpoint, method = 'GET', data = null) {
+        const headers = {
+            'Accept': 'application/json'
+        };
+
+        const token = this.getToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        let bodyData = null;
+        if (data && !(data instanceof FormData)) {
+            headers['Content-Type'] = 'application/json';
+            bodyData = JSON.stringify(data);
+        } else if (data instanceof FormData) {
+            bodyData = data;
+        }
+
+        const urlsToTry = [ACTIVE_API_URL, ...CANDIDATE_API_URLS.filter(u => u !== ACTIVE_API_URL)];
+
+        for (const baseUrl of urlsToTry) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+                const response = await fetch(`${baseUrl}/${endpoint}`, {
+                    method,
+                    headers,
+                    body: bodyData,
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (response.ok || response.status === 400 || response.status === 404 || response.status === 409) {
+                    ACTIVE_API_URL = baseUrl;
+                    localStorage.setItem('active_api_url', baseUrl);
+                    return await response.json();
+                }
+            } catch (err) {
+                // Try next URL
+            }
+        }
+
+        // Offline Simulation Fallback with Persistent Storage
+        return this.handleOfflineFallback(endpoint, method, data);
+    }
+
+    static handleOfflineFallback(endpoint, method, data) {
+        if (endpoint.includes('auth.php')) {
+            if (endpoint.includes('action=register')) {
+                const requestedRole = (data && data.role) ? data.role.toLowerCase().trim() : 'staff';
+                const normalizedRole = (requestedRole === 'admin') ? 'admin' : ((requestedRole === 'supervisor') ? 'supervisor' : 'staff');
+                
+                const mockUser = {
+                    id: Math.floor(Math.random() * 1000) + 10,
+                    username: data.username || 'د. كادر جديد',
+                    email: data.email || 'user@pharmacy.com',
+                    role: normalizedRole
+                };
+                return {
+                    status: 201,
+                    success: true,
+                    message: 'تم إنشاء الحساب بنجاح وتوليد مفتاح المصادقة.',
+                    data: {
+                        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo_token',
+                        user: mockUser
+                    }
+                };
+            }
+
+            // Login action with accurate role resolution and official titles
+            const email = (data && data.email) ? data.email.toLowerCase().trim() : '';
+            let resolvedUser = {
+                id: 1,
+                username: 'مدير النظام',
+                email: 'admin@hospital.local',
+                role: 'admin'
+            };
+
+            if (email.includes('supervisor')) {
+                resolvedUser = {
+                    id: 2,
+                    username: 'مشرف الصيدلية',
+                    email: 'supervisor@hospital.local',
+                    role: 'supervisor'
+                };
+            } else if (email.includes('staff') || email.includes('pharmacist')) {
+                resolvedUser = {
+                    id: 3,
+                    username: 'الصيدلي المسؤول',
+                    email: 'staff@hospital.local',
+                    role: 'staff'
+                };
+            } else if (data && data.role) {
+                const r = data.role.toLowerCase().trim();
+                resolvedUser.role = (r === 'admin') ? 'admin' : ((r === 'supervisor') ? 'supervisor' : 'staff');
+                resolvedUser.username = (r === 'admin') ? 'مدير النظام' : ((r === 'supervisor') ? 'مشرف الصيدلية' : 'الصيدلي المسؤول');
+                resolvedUser.email = email || `${resolvedUser.role}@hospital.local`;
+            }
+
+            return {
+                status: 200,
+                success: true,
+                message: 'تم تسجيل الدخول بنجاح.',
+                data: {
+                    token: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${resolvedUser.role}_demo_token`,
+                    user: resolvedUser
+                }
+            };
+        }
+
+        if (endpoint.includes('medicines.php')) {
+            const currentMeds = getPersistentMedicines();
+            if (method === 'POST' && data) {
+                const newMed = {
+                    id: currentMeds.length + 1,
+                    ...data
+                };
+                currentMeds.unshift(newMed);
+                savePersistentMedicines(currentMeds);
+                return {
+                    status: 201,
+                    success: true,
+                    message: 'تم حفظ الدواء بنجاح.',
+                    data: newMed
+                };
+            }
+            return {
+                status: 200,
+                success: true,
+                message: 'تم استرجاع قائمة الأدوية بنجاح.',
+                data: currentMeds
+            };
+        }
+
+        if (endpoint.includes('suppliers.php')) {
+            if (method === 'POST' && data) {
+                const newSup = {
+                    id: DEMO_SUPPLIERS.length + 1,
+                    ...data
+                };
+                DEMO_SUPPLIERS.push(newSup);
+                return {
+                    status: 201,
+                    success: true,
+                    message: 'تم حفظ المورد بنجاح.',
+                    data: newSup
+                };
+            }
+            return {
+                status: 200,
+                success: true,
+                message: 'تم استرجاع بيانات الموردين بنجاح.',
+                data: DEMO_SUPPLIERS
+            };
+        }
+
+        if (endpoint.includes('orders.php')) {
+            const currentOrders = getPersistentOrders();
+            const currentMeds = getPersistentMedicines();
+
+            if (method === 'POST' && data) {
+                const now = new Date();
+                const dateStr = now.toISOString().replace('T', ' ').substring(0, 19);
+                const orderId = currentOrders.length > 0 ? Math.max(...currentOrders.map(o => o.id || 0)) + 1 : 101;
+                const invNum = data.invoice_number || `INV-${now.getFullYear()}${String(now.getMonth()+1).padStart(2, '0')}-${String(orderId).padStart(3, '0')}`;
+
+                let subtotal = 0;
+                const enrichedItems = (data.items || []).map(item => {
+                    const med = currentMeds.find(m => m.id === parseInt(item.medicine_id));
+                    const unitPrice = parseFloat(item.unit_price || (med ? med.price : 0));
+                    const qty = parseInt(item.quantity || 1);
+                    const lineTotal = unitPrice * qty;
+                    subtotal += lineTotal;
+
+                    // تحديث رصيد المخزون الدائم
+                    if (med) {
+                        if (data.order_type === 'routine_restock') {
+                            med.stock_quantity = (med.stock_quantity || 0) + qty;
+                        } else {
+                            med.stock_quantity = Math.max(0, (med.stock_quantity || 0) - qty);
+                        }
+                    }
+
+                    return {
+                        medicine_id: item.medicine_id,
+                        name: med ? med.name : `دواء #${item.medicine_id}`,
+                        generic_name: med ? med.generic_name : '',
+                        quantity: qty,
+                        unit_price: unitPrice,
+                        total_price: lineTotal
+                    };
+                });
+
+                savePersistentMedicines(currentMeds);
+
+                const discount = parseFloat(data.discount || 0);
+                const taxRate = parseFloat(data.tax_rate || 0);
+                const taxableBase = Math.max(0, subtotal - discount);
+                const taxAmount = parseFloat((taxableBase * (taxRate / 100)).toFixed(2));
+                const totalAmount = parseFloat((taxableBase + taxAmount).toFixed(2));
+
+                const newOrder = {
+                    id: orderId,
+                    invoice_number: invNum,
+                    order_type: data.order_type || 'patient_sale',
+                    customer_name: data.customer_name || 'عميل نقدي / صيدلية',
+                    payment_method: data.payment_method || 'cash',
+                    payment_status: 'مسدد',
+                    status: 'completed',
+                    subtotal: subtotal,
+                    discount: discount,
+                    tax_rate: taxRate,
+                    tax_amount: taxAmount,
+                    total_amount: totalAmount,
+                    created_at: dateStr,
+                    items: enrichedItems,
+                    notes: data.notes || ''
+                };
+
+                currentOrders.unshift(newOrder);
+                savePersistentOrders(currentOrders);
+
+                // مزامنة سحابية مع Supabase Cloud
+                if (window.SupabaseDB && typeof window.SupabaseDB.saveOrder === 'function') {
+                    window.SupabaseDB.saveOrder(newOrder, enrichedItems).catch(() => {});
+                }
+
+                // إشعار غير مانع لمحرك الذكاء الاصطناعي لإعادة التدريب الفوري
+                try {
+                    fetch(`${AI_ENGINE_URL}/retrain`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            transactions: [{ items: enrichedItems.map(i => ({ medicine_id: i.medicine_id, quantity: i.quantity })) }],
+                            source: "frontend_pos_dispense"
+                        })
+                    }).catch(() => {});
+                } catch(e) {}
+
+                return {
+                    status: 201,
+                    success: true,
+                    message: 'تم إصدار الفاتورة وحفظها وتحديث المخزون بنجاح (محلياً وسحابياً عبر Supabase).',
+                    data: newOrder
+                };
+            }
+
+            // فحص طلب تفاصيل فاتورة واحدة
+            const urlParams = new URLSearchParams(endpoint.split('?')[1] || '');
+            const targetId = urlParams.get('id');
+            if (targetId) {
+                const single = currentOrders.find(o => o.id === parseInt(targetId));
+                if (single) {
+                    return { status: 200, success: true, message: 'تم استرجاع تفاصيل الفاتورة.', data: single };
+                }
+            }
+
+            return {
+                status: 200,
+                success: true,
+                message: 'تم استرجاع قائمة فواتير المبيعات بنجاح.',
+                data: currentOrders
+            };
+        }
+
+        return {
+            status: 200,
+            success: true,
+            message: 'تمت المعالجة بنجاح.',
+            data: []
+        };
+    }
+}
+
+class AIEngine {
+    static normalizeArabic(text) {
+        if (!text) return '';
+        return String(text).toLowerCase()
+            .replace(/[أإآٱ]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/ى/g, 'ي')
+            .replace(/[ًٌٍََُِّْـ]/g, '');
+    }
+
+    static stringSimilarity(s1, s2) {
+        if (s1 === s2) return 1.0;
+        if (!s1 || !s2) return 0.0;
+        let longer = s1.length > s2.length ? s1 : s2;
+        let shorter = s1.length > s2.length ? s2 : s1;
+        let longerLength = longer.length;
+        if (longerLength === 0) return 1.0;
+        
+        let costs = [];
+        for (let i = 0; i <= s1.length; i++) {
+            let lastValue = i;
+            for (let j = 0; j <= s2.length; j++) {
+                if (i === 0) costs[j] = j;
+                else if (j > 0) {
+                    let newValue = costs[j - 1];
+                    if (s1.charAt(i - 1) !== s2.charAt(j - 1))
+                        newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                    costs[j - 1] = lastValue;
+                    lastValue = newValue;
+                }
+            }
+            if (i > 0) costs[s2.length] = lastValue;
+        }
+        return (longerLength - costs[s2.length]) / longerLength;
+    }
+
+    static calculateArabicSimilarity(query, target) {
+        if (!query || !target) return 0;
+        const qNorm = AIEngine.normalizeArabic(query);
+        const tNorm = AIEngine.normalizeArabic(target);
+
+        if (qNorm === tNorm) return 1.0;
+        if (tNorm.includes(qNorm)) return 0.98;
+
+        const delimiters = ['(', ')', '/', '-', '_', ',', '+', '[', ']', '•', '،'];
+        let cleanTarget = tNorm;
+        for (const d of delimiters) {
+            cleanTarget = cleanTarget.replaceAll(d, ' ');
+        }
+        const tokens = cleanTarget.split(/\s+/).filter(Boolean);
+        let bestRatio = 0;
+
+        for (const tok of tokens) {
+            if (tok === qNorm) return 1.0;
+            if (tok.includes(qNorm) || qNorm.includes(tok)) {
+                bestRatio = Math.max(bestRatio, 0.88);
+            }
+            const sim = AIEngine.stringSimilarity(qNorm, tok);
+            if (sim > bestRatio) bestRatio = sim;
+        }
+
+        // مطابقة الهيكل الحرفي بدون حروف العلة العربية (ا، و، ي)
+        const skel = (s) => s.replace(/[اوي]/g, '');
+        const qSkel = skel(qNorm);
+        if (qSkel.length >= 2) {
+            for (const tok of tokens) {
+                const tSkel = skel(tok);
+                if (tSkel.length >= 2) {
+                    if (qSkel === tSkel) {
+                        bestRatio = Math.max(bestRatio, 0.92);
+                    } else if (tSkel.includes(qSkel) || qSkel.includes(tSkel)) {
+                        bestRatio = Math.max(bestRatio, 0.80);
+                    }
+                }
+            }
+        }
+
+        return Math.round(bestRatio * 1000) / 1000;
+    }
+
+    static async smartSearch(query, medicines) {
+        query = (query || '').trim();
+        if (!query) {
+            const list = medicines || DEMO_MEDICINES;
+            return { success: true, query: '', total_results: list.length, data: list };
+        }
+
+        // Try AI FastAPI service first if reachable
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 600);
+
+            const response = await fetch(`${AI_ENGINE_URL}/smart-search`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ query, medicines: medicines || DEMO_MEDICINES }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            const json = await response.json();
+            if (json && json.success && json.data && json.data.length > 0) {
+                return json;
+            }
+        } catch (err) {}
+
+        // High-performance client-side Arabic fuzzy search
+        const list = (medicines && medicines.length > 0) ? medicines : DEMO_MEDICINES;
+        const results = list.map(m => {
+            const nameScore = AIEngine.calculateArabicSimilarity(query, m.name || '');
+            const genericScore = AIEngine.calculateArabicSimilarity(query, m.generic_name || '');
+            const catScore = AIEngine.calculateArabicSimilarity(query, m.category || '');
+
+            const maxScore = Math.max(nameScore * 1.0, genericScore * 0.95, catScore * 0.70);
+            return {
+                ...m,
+                relevance_score: Math.round(Math.min(maxScore, 1.0) * 1000) / 1000
+            };
+        }).filter(m => m.relevance_score >= 0.40).sort((a, b) => b.relevance_score - a.relevance_score);
+
+        return {
+            success: true,
+            query: query,
+            total_results: results.length,
+            data: results
+        };
+    }
+}
+
+// Bind methods and export globals for universal availability
+APIClient.smartSearch = AIEngine.smartSearch;
+APIClient.calculateArabicSimilarity = AIEngine.calculateArabicSimilarity;
+APIClient.normalizeArabic = AIEngine.normalizeArabic;
+
+if (typeof window !== 'undefined') {
+    window.APIClient = APIClient;
+    window.AIEngine = AIEngine;
+    window.DEMO_MEDICINES = DEMO_MEDICINES;
+}
+

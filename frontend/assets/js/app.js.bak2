@@ -1,0 +1,238 @@
+// Auto-migrate and update cached demo user session in localStorage immediately
+(function autoUpdateSession() {
+    try {
+        const raw = localStorage.getItem('user_data');
+        if (raw) {
+            const u = JSON.parse(raw);
+            const email = (u.email || '').toLowerCase().trim();
+            const role = (u.role || '').toLowerCase().trim();
+
+            if (email.includes('admin') || role === 'admin') {
+                u.username = 'مدير النظام';
+                u.role = 'admin';
+                u.email = 'admin@hospital.local';
+                localStorage.setItem('user_data', JSON.stringify(u));
+            } else if (email.includes('supervisor') || role === 'supervisor') {
+                u.username = 'مشرف الصيدلية';
+                u.role = 'supervisor';
+                u.email = 'supervisor@hospital.local';
+                localStorage.setItem('user_data', JSON.stringify(u));
+            } else if (email.includes('staff') || email.includes('pharmacist') || role === 'staff' || role === 'pharmacist') {
+                u.username = 'الصيدلي المسؤول';
+                u.role = 'staff';
+                u.email = 'staff@hospital.local';
+                localStorage.setItem('user_data', JSON.stringify(u));
+            }
+        }
+    } catch (e) {
+        console.error('Session update error:', e);
+    }
+})();
+
+// Dynamic Auth, Role-Based Access Control (RBAC), and Navigation System
+class AppAuth {
+    static getUser() {
+        try {
+            const data = localStorage.getItem('user_data');
+            return data ? JSON.parse(data) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    static getToken() {
+        return localStorage.getItem('jwt_token');
+    }
+
+    static isAuthenticated() {
+        return !!(this.getToken() && this.getUser());
+    }
+
+    static getNormalizedRole() {
+        const user = this.getUser();
+        if (!user || !user.role) return null;
+        const r = user.role.toLowerCase().trim();
+        if (r === 'admin' || r === 'administrator') return 'admin';
+        if (r === 'supervisor' || r === 'manager') return 'supervisor';
+        return 'staff';
+    }
+
+    static getRoleLabel(role = null) {
+        const r = role ? role.toLowerCase().trim() : this.getNormalizedRole();
+        if (r === 'admin') return 'مدير النظام';
+        if (r === 'supervisor') return 'مدير الصيدلية';
+        return 'صيدلي / موظف';
+    }
+
+    static getDefaultPage() {
+        const role = this.getNormalizedRole();
+        return (role === 'admin' || role === 'supervisor') ? 'dashboard.html' : 'medicines.html';
+    }
+
+    static logout() {
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('user_data');
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const loginUrl = isSubpage ? 'login.html' : 'pages/login.html';
+        window.location.href = loginUrl;
+    }
+
+    /**
+     * حماية الصفحات وتوجيه المستخدم بسلاسة بدون تعليق الشاشة
+     */
+    static requireAuth(allowedRoles = null) {
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const loginUrl = isSubpage ? 'login.html' : 'pages/login.html';
+
+        if (!this.isAuthenticated()) {
+            localStorage.setItem('redirect_after_login', window.location.href);
+            window.location.href = loginUrl;
+            return false;
+        }
+
+        if (allowedRoles && allowedRoles.length > 0) {
+            const currentRole = this.getNormalizedRole();
+            const normalizedAllowed = allowedRoles.map(r => r.toLowerCase().trim());
+            const isAllowed = normalizedAllowed.includes(currentRole) || 
+                              (currentRole === 'staff' && normalizedAllowed.includes('pharmacist'));
+
+            if (!isAllowed) {
+                const targetPage = isSubpage ? 'medicines.html' : 'pages/medicines.html';
+                window.location.href = targetPage;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * بناء وتحديث شريط التنقل ديناميكياً
+     */
+    static renderNavbar() {
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const prefix = isSubpage ? '' : 'pages/';
+        const rootPrefix = isSubpage ? '../index.html' : 'index.html';
+        const currentFile = window.location.pathname.split('/').pop() || 'index.html';
+
+        const navContainer = document.querySelector('.navbar');
+        if (!navContainer) return;
+
+        const isAuth = this.isAuthenticated();
+        const user = this.getUser();
+        const role = this.getNormalizedRole();
+
+        let navLinksHtml = '';
+
+        if (!isAuth) {
+            navLinksHtml = `
+                <li><a href="${rootPrefix}" class="${currentFile === 'index.html' ? 'active' : ''}">الرئيسية</a></li>
+                <li><a href="${prefix}chat.html" class="${currentFile === 'chat.html' ? 'active' : ''}">المساعد الذكي</a></li>
+                <li><a href="${prefix}login.html" class="${currentFile === 'login.html' ? 'active' : ''}">تسجيل الدخول</a></li>
+                <li><a href="${prefix}register.html" class="${currentFile === 'register.html' ? 'active' : ''}">إنشاء حساب</a></li>
+            `;
+        } else {
+            let links = [
+                { url: `${rootPrefix}`, title: 'الرئيسية', file: 'index.html', roles: ['admin', 'supervisor', 'staff'] },
+                { url: `${prefix}dashboard.html`, title: 'المؤشرات', file: 'dashboard.html', roles: ['admin', 'supervisor'] },
+                { url: `${prefix}inventory.html`, title: 'المخزون', file: 'inventory.html', roles: ['admin', 'supervisor', 'staff'] },
+                { url: `${prefix}medicines.html`, title: 'الأدوية', file: 'medicines.html', roles: ['admin', 'supervisor', 'staff'] },
+                { url: `${prefix}orders.html`, title: 'الفواتير', file: 'orders.html', roles: ['admin', 'supervisor', 'staff'] },
+                { url: `${prefix}predictions.html`, title: 'التنبؤ الذكي', file: 'predictions.html', roles: ['admin', 'supervisor', 'staff'] },
+                { url: `${prefix}chat.html`, title: 'المساعد الذكي', file: 'chat.html', roles: ['admin', 'supervisor', 'staff'] },
+                { url: `${prefix}suppliers.html`, title: 'الموردين', file: 'suppliers.html', roles: ['admin', 'supervisor'] },
+                { url: `${prefix}reports.html`, title: 'التقارير', file: 'reports.html', roles: ['admin', 'supervisor'] },
+                { url: `${prefix}settings.html`, title: 'الإعدادات', file: 'settings.html', roles: ['admin'] }
+            ];
+
+            links.forEach(l => {
+                if (l.roles.includes(role)) {
+                    const isActive = currentFile === l.file ? 'active' : '';
+                    navLinksHtml += `<li><a href="${l.url}" class="${isActive}">${l.title}</a></li>`;
+                }
+            });
+        }
+
+        let userSectionHtml = '';
+        const newOrderUrl = `${prefix}order_create.html`;
+
+        if (isAuth && user) {
+            const roleBadgeColor = role === 'admin' ? 'var(--danger, #ef4444)' : (role === 'supervisor' ? 'var(--warning, #f59e0b)' : 'var(--primary, #0ea5e9)');
+            userSectionHtml = `
+                <div class="nav-user-section">
+                    <a href="${newOrderUrl}" class="btn btn-pos" style="padding: 0.35rem 0.85rem; font-size: 0.82rem; text-decoration: none; border-radius: var(--radius-full);">
+                        + صرف فاتورة (POS)
+                    </a>
+                    <a href="${prefix}profile.html" style="text-decoration: none; display: flex; align-items: center; gap: 0.4rem; background: var(--bg-hover); padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 700; font-size: 0.82rem; color: var(--text-main); border: 1px solid var(--border); transition: var(--transition);">
+                        <span>${user.username || 'المستخدم'}</span>
+                        <span style="font-size: 0.72rem; background: ${roleBadgeColor}; color: #ffffff; padding: 1px 6px; border-radius: 10px; font-weight: 700;">${this.getRoleLabel(role)}</span>
+                    </a>
+                    <button class="theme-toggle" onclick="toggleTheme()" title="تبديل المظهر النهاري/الليلي" style="padding: 0.25rem 0.55rem; font-size: 0.8rem; border-radius: var(--radius-full);">المظهر</button>
+                    <button class="btn btn-secondary" onclick="AppAuth.logout()" style="padding: 0.25rem 0.6rem; font-size: 0.8rem; color: var(--danger); border-color: rgba(220, 38, 38, 0.3); border-radius: var(--radius-full);">خروج</button>
+                </div>
+            `;
+        } else {
+            userSectionHtml = `
+                <div class="nav-user-section">
+                    <a href="${prefix}login.html" class="btn" style="padding: 0.35rem 0.85rem; font-size: 0.85rem; border-radius: var(--radius-full);">تسجيل الدخول</a>
+                    <button class="theme-toggle" onclick="toggleTheme()" style="padding: 0.25rem 0.55rem; font-size: 0.8rem; border-radius: var(--radius-full);">المظهر</button>
+                </div>
+            `;
+        }
+
+        navContainer.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <a href="${rootPrefix}" class="logo" style="text-decoration: none;">
+                    <span>SPMS</span>
+                    <span style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); border-right: 1.5px solid var(--border); padding-right: 0.5rem; margin-right: 0.2rem;">إدارة الصيدلية الذكية</span>
+                </a>
+                <div style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; background: var(--bg-hover); padding: 2px 8px; border-radius: 12px; border: 1px solid var(--border); color: var(--text-muted);" title="سحابة Supabase نشطة ومتصلة">
+                    <span class="pulse-dot"></span>
+                    <span>سحابي</span>
+                </div>
+            </div>
+            <ul class="nav-links">
+                ${navLinksHtml}
+            </ul>
+            ${userSectionHtml}
+        `;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.body.setAttribute('data-theme', savedTheme);
+    AppAuth.renderNavbar();
+
+    // تحميل سكريبت الويدجت العائم تلقائياً إذا لم يكن مضافاً
+    if (!document.getElementById('spmsChatFab') && !window.location.pathname.endsWith('chat.html')) {
+        const isSubpage = window.location.pathname.includes('/pages/') || window.location.href.includes('/pages/');
+        const script = document.createElement('script');
+        script.src = isSubpage ? '../assets/js/chatbot-widget.js' : 'assets/js/chatbot-widget.js';
+        document.body.appendChild(script);
+    }
+});
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'light';
+    const nextTheme = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    document.body.setAttribute('data-theme', nextTheme);
+    localStorage.setItem('theme', nextTheme);
+}
+
+function showNotification(msg, type = 'success') {
+    const div = document.createElement('div');
+    div.className = `badge badge-${type}`;
+    div.style.position = 'fixed';
+    div.style.bottom = '20px';
+    div.style.right = '20px';
+    div.style.padding = '12px 20px';
+    div.style.zIndex = '9999';
+    div.style.boxShadow = '0 5px 15px rgba(0,0,0,0.15)';
+    div.textContent = msg;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+}
+

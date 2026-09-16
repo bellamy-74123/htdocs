@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجل الأدوية والمخزون | نظام إدارة الصيدلية</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <div class="card" style="padding: 1.5rem;">
+            <div class="card-header" style="margin-bottom: 1rem;">
+                <div>
+                    <h2 style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0;">دليل الأدوية والمخزون الحي</h2>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">إدارة 42+ صنفاً دوائياً، تصفية المجموعات العلاجية، ومتابعة الأرصدة والأسعار لحظياً.</p>
+                </div>
+                <div id="addMedBtnContainer" style="display: flex; gap: 0.5rem; align-items: center;"></div>
+            </div>
+
+            <!-- Search & Actions Bar -->
+            <div style="display: flex; gap: 0.6rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                <input type="text" id="searchInput" class="form-control" style="flex: 2; min-width: 260px; font-weight: 600;" placeholder="بحث فوري بالاسم التجاري، العلمي، أو البديل (مثال: بندول، فلترين، أوجمنتين)..." oninput="handleInstantSearch(this.value)">
+                <button class="btn" onclick="performSmartSearch()" style="padding: 0.55rem 1.4rem;">بحث ذكي</button>
+                <button class="btn btn-secondary" onclick="resetFiltersAndLoad()">إعادة ضبط</button>
+                <button class="btn btn-secondary" onclick="downloadXmlFormat()" title="تصدير بيانات الأدوية بصيغة XML">تصدير XML</button>
+            </div>
+
+            <!-- Category Filter Pills -->
+            <div class="pill-filter-bar" id="categoryPillBar">
+                <span style="font-size: 0.82rem; font-weight: 800; color: var(--text-muted); margin-left: 0.25rem;">الفئة العلاجية:</span>
+                <button class="pill-btn active" onclick="filterByCategory('all', this)">كافة الأصناف (42)</button>
+                <button class="pill-btn" onclick="filterByCategory('antibiotic', this)">مضادات حيوية</button>
+                <button class="pill-btn" onclick="filterByCategory('analgesic', this)">مسكنات وحرارة</button>
+                <button class="pill-btn" onclick="filterByCategory('nsaid', this)">مضادات التهاب</button>
+                <button class="pill-btn" onclick="filterByCategory('gastrointestinal', this)">أدوية معدة (PPI)</button>
+            </div>
+
+            <!-- Stock Status Filter Pills -->
+            <div class="pill-filter-bar" id="stockStatusPillBar" style="margin-top: 0; margin-bottom: 1.25rem;">
+                <span style="font-size: 0.82rem; font-weight: 800; color: var(--text-muted); margin-left: 0.25rem;">حالة المخزون:</span>
+                <button class="pill-btn active" onclick="filterByStock('all', this)">جميع الأرصدة</button>
+                <button class="pill-btn" onclick="filterByStock('safe', this)" style="color: var(--success);">مخزون آمن (>30)</button>
+                <button class="pill-btn" onclick="filterByStock('low', this)" style="color: var(--warning);">منخفض (16-30)</button>
+                <button class="pill-btn" onclick="filterByStock('critical', this)" style="color: var(--danger);">حرج وشك النفاد (≤15)</button>
+            </div>
+
+            <table style="margin-top: 0.5rem;">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>الصنف التجاري</th>
+                        <th>المادة الفعالة (Generic)</th>
+                        <th>المجموعة العلاجية</th>
+                        <th>سعر الوحدة</th>
+                        <th>الرصيد المتاح</th>
+                        <th>تاريخ الصلاحية</th>
+                        <th>حالة المخزون</th>
+                        <th style="text-align: center;">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="medicineTableBody">
+                    <tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-muted);">جاري استرجاع بيانات الأدوية...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        let searchDebounceTimer = null;
+        function handleInstantSearch(val) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                performSmartSearch();
+            }, 100);
+        }
+
+        if (AppAuth.requireAuth()) {
+            const role = AppAuth.getNormalizedRole();
+            if (role === 'admin' || role === 'supervisor') {
+                document.getElementById('addMedBtnContainer').innerHTML = `
+                    <a href="medicine_form.html" class="btn" style="font-size: 0.88rem;">إضافة صنف جديد</a>
+                `;
+            }
+            loadMedicines();
+
+            document.getElementById('searchInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    performSmartSearch();
+                }
+            });
+        }
+
+        let allMedicines = (typeof DEMO_MEDICINES !== 'undefined' && Array.isArray(DEMO_MEDICINES)) ? [...DEMO_MEDICINES] : [];
+
+        async function loadMedicines() {
+            try {
+                const res = await APIClient.request('medicines.php');
+                if (res.success && res.data && res.data.length > 0) {
+                    allMedicines = res.data;
+                    renderTable(allMedicines);
+                } else {
+                    useFallbackList();
+                }
+            } catch (e) {
+                useFallbackList();
+            }
+        }
+
+        function useFallbackList() {
+            allMedicines = [
+                // --- مضادات حيوية: أموكسيسيلين + كلافولانات ---
+                { id: 1, name: "أوجمنتين 1 جم (Augmentin 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 45.00, stock_quantity: 85, expiry_date: "2026-11-30" },
+                { id: 2, name: "كلافوكس 1 جم (Clavox 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 32.00, stock_quantity: 40, expiry_date: "2026-10-15" },
+                { id: 3, name: "ميجاموكس 1 جم (Megamox 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 28.00, stock_quantity: 60, expiry_date: "2026-12-10" },
+                { id: 4, name: "كيورام 1 جم (Curam 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 30.00, stock_quantity: 55, expiry_date: "2027-03-20" },
+                { id: 5, name: "جلمنتين 2X 1 جم (Julmentin 2X 1g)", generic_name: "أموكسيسيلين + كلافولانات (Amoxicillin + Clavulanate)", category: "مضاد حيوي (Antibiotic)", price: 26.50, stock_quantity: 75, expiry_date: "2027-01-15" },
+
+                // --- مضادات حيوية: أموكسيسيلين منفرد ---
+                { id: 6, name: "أموكسيل 500 مجم (Amoxil 500mg)", generic_name: "أموكسيسيلين (Amoxicillin)", category: "مضاد حيوي (Antibiotic)", price: 18.00, stock_quantity: 120, expiry_date: "2027-02-28" },
+                { id: 7, name: "هيموكس 500 مجم (H-Mox 500mg)", generic_name: "أموكسيسيلين (Amoxicillin)", category: "مضاد حيوي (Antibiotic)", price: 12.00, stock_quantity: 95, expiry_date: "2026-12-31" },
+                { id: 8, name: "أموكسيدار 500 مجم (Amoxydar 500mg)", generic_name: "أموكسيسيلين (Amoxicillin)", category: "مضاد حيوي (Antibiotic)", price: 14.50, stock_quantity: 110, expiry_date: "2027-04-10" },
+
+                // --- مضادات حيوية: أزيثرومايسين ---
+                { id: 9, name: "زيثروماكس 500 مجم (Zithromax 500mg)", generic_name: "أزيثرومايسين (Azithromycin)", category: "مضاد حيوي (Antibiotic)", price: 55.00, stock_quantity: 35, expiry_date: "2026-11-20" },
+                { id: 10, name: "أزوميسين 500 مجم (Azomycin 500mg)", generic_name: "أزيثرومايسين (Azithromycin)", category: "مضاد حيوي (Antibiotic)", price: 28.00, stock_quantity: 70, expiry_date: "2027-05-15" },
+                { id: 11, name: "زيسروسين 500 مجم (Zisrocin 500mg)", generic_name: "أزيثرومايسين (Azithromycin)", category: "مضاد حيوي (Antibiotic)", price: 22.00, stock_quantity: 80, expiry_date: "2027-06-30" },
+
+                // --- مضادات حيوية: فلوروكينولون ---
+                { id: 12, name: "سيبروباي 500 مجم (Ciprobay 500mg)", generic_name: "سيبروفلوكساسين (Ciprofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 42.00, stock_quantity: 45, expiry_date: "2026-10-30" },
+                { id: 13, name: "سيبرودار 500 مجم (Ciprodar 500mg)", generic_name: "سيبروفلوكساسين (Ciprofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 19.00, stock_quantity: 90, expiry_date: "2027-07-20" },
+                { id: 14, name: "تافانيك 500 مجم (Tavanic 500mg)", generic_name: "ليفوفلوكساسين (Levofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 68.00, stock_quantity: 25, expiry_date: "2027-08-15" },
+                { id: 15, name: "ليفودار 500 مجم (Levodar 500mg)", generic_name: "ليفوفلوكساسين (Levofloxacin)", category: "مضاد حيوي (Antibiotic)", price: 34.00, stock_quantity: 50, expiry_date: "2027-09-10" },
+
+                // --- مضادات حيوية: سيفالوسبورين ومطهر ---
+                { id: 16, name: "سيفودوكس 200 مجم (Cefodox 200mg)", generic_name: "سيفبودوكسيم (Cefpodoxime)", category: "مضاد حيوي (Antibiotic)", price: 48.00, stock_quantity: 38, expiry_date: "2026-12-15" },
+                { id: 17, name: "كلاسيد 500 مجم (Klacid 500mg)", generic_name: "كلاريثرومايسين (Clarithromycin)", category: "مضاد حيوي (Antibiotic)", price: 62.00, stock_quantity: 30, expiry_date: "2027-03-30" },
+                { id: 18, name: "فلاجيل 500 مجم (Flagyl 500mg)", generic_name: "ميترونيدازول (Metronidazole)", category: "مضاد حيوي ومطهر معوي (Antibiotic & Antiprotozoal)", price: 11.00, stock_quantity: 160, expiry_date: "2027-10-25" },
+
+                // --- مسكنات وخافضات حرارة: باراسيتامول ---
+                { id: 19, name: "بنادول إكسترا 500 مجم (Panadol Extra 500mg)", generic_name: "باراسيتامول + كافيين (Paracetamol + Caffeine)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 12.00, stock_quantity: 250, expiry_date: "2027-06-15" },
+                { id: 20, name: "بنادول أدفانس 500 مجم (Panadol Advance 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 9.50, stock_quantity: 210, expiry_date: "2027-08-10" },
+                { id: 21, name: "أدول 500 مجم (Adol 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 7.50, stock_quantity: 190, expiry_date: "2026-09-30" },
+                { id: 22, name: "فيفادول 500 مجم (Fevadol 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 6.00, stock_quantity: 240, expiry_date: "2027-11-20" },
+                { id: 23, name: "باراسيتامول فارما 500 مجم (Paracetamol Pharma 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 5.00, stock_quantity: 180, expiry_date: "2027-08-20" },
+                { id: 24, name: "ريفانين 500 مجم (Revanin 500mg)", generic_name: "باراسيتامول (Paracetamol)", category: "مسكن وخافض حرارة (Analgesic & Antipyretic)", price: 5.50, stock_quantity: 150, expiry_date: "2027-04-15" },
+
+                // --- مسكنات ومضادات التهاب: إيبوبروفين ---
+                { id: 25, name: "بروفين 400 مجم (Brufen 400mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 15.00, stock_quantity: 130, expiry_date: "2027-01-10" },
+                { id: 26, name: "بروفين 600 مجم (Brufen 600mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 19.50, stock_quantity: 85, expiry_date: "2027-02-15" },
+                { id: 27, name: "سابوفين 400 مجم (Sapofen 400mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 11.00, stock_quantity: 140, expiry_date: "2026-11-25" },
+                { id: 28, name: "إيبوفيل 400 مجم (Ibupophil 400mg)", generic_name: "إيبوبروفين (Ibuprofen)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 9.00, stock_quantity: 105, expiry_date: "2027-05-30" },
+
+                // --- مسكنات ومضادات التهاب: ديكلوفيناك ---
+                { id: 29, name: "فولتارين 50 مجم (Voltaren 50mg)", generic_name: "ديكلوفيناك الصوديوم (Diclofenac Sodium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 22.00, stock_quantity: 75, expiry_date: "2026-08-30" },
+                { id: 30, name: "ديكلوجين 50 مجم (Diclogen 50mg)", generic_name: "ديكلوفيناك الصوديوم (Diclofenac Sodium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 11.00, stock_quantity: 95, expiry_date: "2026-12-05" },
+                { id: 31, name: "ديفيدو 75 مجم كبسول (Divido 75mg)", generic_name: "ديكلوفيناك الصوديوم (Diclofenac Sodium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 28.00, stock_quantity: 50, expiry_date: "2027-07-15" },
+                { id: 32, name: "كتافلام 50 مجم (Cataflam 50mg)", generic_name: "ديكلوفيناك البوتاسيوم (Diclofenac Potassium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 24.00, stock_quantity: 80, expiry_date: "2027-03-25" },
+                { id: 33, name: "رابيدوس 50 مجم (Rapidus 50mg)", generic_name: "ديكلوفيناك البوتاسيوم (Diclofenac Potassium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 16.50, stock_quantity: 90, expiry_date: "2027-01-30" },
+                { id: 34, name: "أولفين 50 مجم (Olfen 50mg)", generic_name: "ديكلوفيناك البوتاسيوم (Diclofenac Potassium)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 14.00, stock_quantity: 65, expiry_date: "2026-10-20" },
+
+                // --- مسكنات تخصصية ومضادات تقلص ---
+                { id: 35, name: "سيلبركس 200 مجم (Celebrex 200mg)", generic_name: "سيليكوكسيب (Celecoxib)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 65.00, stock_quantity: 40, expiry_date: "2027-09-15" },
+                { id: 36, name: "سيلكوكس 200 مجم (Celcox 200mg)", generic_name: "سيليكوكسيب (Celecoxib)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 32.00, stock_quantity: 60, expiry_date: "2027-10-30" },
+                { id: 37, name: "موبيك 15 مجم (Mobic 15mg)", generic_name: "ميلوكسيكام (Meloxicam)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 38.00, stock_quantity: 45, expiry_date: "2027-06-20" },
+                { id: 38, name: "بونستان فورت 500 مجم (Ponstan Forte 500mg)", generic_name: "حمض الميفيناميك (Mefenamic Acid)", category: "مسكن ومضاد للالتهاب (NSAID / Anti-inflammatory)", price: 18.00, stock_quantity: 85, expiry_date: "2027-04-30" },
+                { id: 39, name: "سباسموبان 10 مجم (Spasmopan 10mg)", generic_name: "هيوسين بوتيل بروميد (Hyoscine Butylbromide)", category: "مسكن لتقلصات الجهاز الهضمي (Antispasmodic)", price: 13.50, stock_quantity: 110, expiry_date: "2027-08-15" },
+
+                // --- أدوية حماية المعدة والجهاز الهضمي ---
+                { id: 40, name: "أوميبرازول 20 مجم (Omeprazole 20mg)", generic_name: "أوميبرازول (Omeprazole)", category: "أدوية الجهاز الهضمي والمعدة (Gastrointestinal / PPI)", price: 20.00, stock_quantity: 140, expiry_date: "2027-04-15" },
+                { id: 41, name: "نيكسيوم 40 مجم (Nexium 40mg)", generic_name: "إيزوميبرازول (Esomeprazole)", category: "أدوية الجهاز الهضمي والمعدة (Gastrointestinal / PPI)", price: 72.00, stock_quantity: 55, expiry_date: "2027-11-30" },
+                { id: 42, name: "كونترولوك 40 مجم (Controloc 40mg)", generic_name: "بانتوبرازول (Pantoprazole)", category: "أدوية الجهاز الهضمي والمعدة (Gastrointestinal / PPI)", price: 54.00, stock_quantity: 65, expiry_date: "2027-07-25" }
+            ];
+            renderTable(allMedicines);
+        }
+
+        let currentCategoryFilter = 'all';
+        let currentStockFilter = 'all';
+
+        function filterByCategory(cat, btn) {
+            currentCategoryFilter = cat;
+            document.querySelectorAll('#categoryPillBar .pill-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            applyFilters();
+        }
+
+        function filterByStock(st, btn) {
+            currentStockFilter = st;
+            document.querySelectorAll('#stockStatusPillBar .pill-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            applyFilters();
+        }
+
+        function resetFiltersAndLoad() {
+            currentCategoryFilter = 'all';
+            currentStockFilter = 'all';
+            document.getElementById('searchInput').value = '';
+            document.querySelectorAll('#categoryPillBar .pill-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+            document.querySelectorAll('#stockStatusPillBar .pill-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+            renderTable(allMedicines);
+        }
+
+        function applyFilters() {
+            let list = [...allMedicines];
+
+            // تصفية الفئة
+            if (currentCategoryFilter !== 'all') {
+                list = list.filter(m => {
+                    const c = (m.category || '').toLowerCase();
+                    if (currentCategoryFilter === 'antibiotic') return c.includes('antibiotic') || c.includes('مضاد حيوي');
+                    if (currentCategoryFilter === 'analgesic') return c.includes('analgesic') || c.includes('مسكن');
+                    if (currentCategoryFilter === 'nsaid') return c.includes('nsaid') || c.includes('التهاب');
+                    if (currentCategoryFilter === 'gastrointestinal') return c.includes('gastro') || c.includes('معدة') || c.includes('ppi');
+                    return true;
+                });
+            }
+
+            // تصفية الرصيد
+            if (currentStockFilter !== 'all') {
+                list = list.filter(m => {
+                    const s = parseInt(m.stock_quantity || 0);
+                    if (currentStockFilter === 'safe') return s > 30;
+                    if (currentStockFilter === 'low') return s >= 16 && s <= 30;
+                    if (currentStockFilter === 'critical') return s <= 15;
+                    return true;
+                });
+            }
+
+            renderTable(list);
+        }
+
+        function renderTable(list) {
+            const tbody = document.getElementById('medicineTableBody');
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-muted);">لا توجد أصناف مطابقة لخيارات الفلترة الحالية.</td></tr>';
+                return;
+            }
+            const role = AppAuth.getNormalizedRole();
+            const canManage = (role === 'admin' || role === 'supervisor');
+
+            tbody.innerHTML = list.map(m => {
+                const stock = parseInt(m.stock_quantity || 0);
+                let stockBadge = `<span class="badge badge-success" style="font-weight:800;">${stock} علبة</span>`;
+                let healthText = `<span style="color: var(--success); font-weight:700; font-size:0.8rem;">مستقر</span>`;
+
+                if (stock <= 15) {
+                    stockBadge = `<span class="badge badge-danger" style="font-weight:800;">${stock} علبة</span>`;
+                    healthText = `<span style="color: var(--danger); font-weight:800; font-size:0.8rem;">حرج جداً</span>`;
+                } else if (stock <= 30) {
+                    stockBadge = `<span class="badge badge-warning" style="font-weight:800;">${stock} علبة</span>`;
+                    healthText = `<span style="color: var(--warning); font-weight:700; font-size:0.8rem;">قريب لإعادة الطلب</span>`;
+                }
+
+                return `
+                    <tr>
+                        <td style="font-weight: 700; color: var(--text-muted);">#${m.id}</td>
+                        <td>
+                            <strong style="color: var(--text-main); font-size: 0.94rem;">${m.name}</strong>
+                        </td>
+                        <td><code style="font-size: 0.82rem;">${m.generic_name || '-'}</code></td>
+                        <td><span style="font-size: 0.84rem; color: var(--text-muted);">${m.category || 'عام'}</span></td>
+                        <td><strong style="color: var(--primary); font-size: 0.95rem;">${parseFloat(m.price).toFixed(2)}</strong> ريال</td>
+                        <td>${stockBadge}</td>
+                        <td style="font-size: 0.86rem; color: var(--text-muted);">${m.expiry_date ? String(m.expiry_date).substring(0, 10) : '-'}</td>
+                        <td>${healthText}</td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 0.35rem; align-items: center;">
+                                <a href="order_create.html?med_id=${m.id}" class="btn btn-pos" style="padding: 0.2rem 0.55rem; font-size: 0.76rem; border-radius: var(--radius-sm);" title="صرف فوري في نقطة البيع">+ صرف</a>
+                                <a href="predictions.html?med_id=${m.id}" class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.76rem; border-radius: var(--radius-sm);" title="تحليل وتوقع الطلب">ROP</a>
+                                ${canManage ? `<a href="medicine_form.html?id=${m.id}" class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.76rem; border-radius: var(--radius-sm);" title="تعديل بيانات الدواء">تعديل</a>` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function performSmartSearch() {
+            const input = document.getElementById('searchInput');
+            const q = (input ? input.value : '').trim();
+            const list = (allMedicines && allMedicines.length > 0) ? allMedicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
+            
+            if (!q) {
+                renderTable(list);
+                return;
+            }
+
+            try {
+                const res = await AIEngine.smartSearch(q, list);
+                if (res && res.data && res.data.length > 0) {
+                    renderTable(res.data);
+                    return;
+                }
+            } catch (err) {}
+
+            // Fallback direct fuzzy search
+            const results = list.map(m => {
+                const nameScore = AIEngine.calculateArabicSimilarity(q, m.name || '');
+                const genScore = AIEngine.calculateArabicSimilarity(q, m.generic_name || '');
+                const catScore = AIEngine.calculateArabicSimilarity(q, m.category || '');
+                const maxScore = Math.max(nameScore * 1.0, genScore * 0.95, catScore * 0.70);
+                return { ...m, relevance_score: Math.round(Math.min(maxScore, 1.0) * 1000) / 1000 };
+            }).filter(m => m.relevance_score >= 0.40).sort((a, b) => b.relevance_score - a.relevance_score);
+
+            if (results.length > 0) {
+                renderTable(results);
+            } else {
+                const tbody = document.getElementById('medicineTableBody');
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                        <div style="font-weight: 800; font-size: 1.05rem; color: var(--text-main); margin-bottom: 0.35rem;">لم يتم العثور على أدوية مطابقة للاستعلام "${escapeXml(q)}"</div>
+                        <div style="font-size: 0.85rem;">جرب البحث بكلمات أخرى أو بجزء من الاسم العلمي أو التجاري.</div>
+                    </td></tr>`;
+                }
+            }
+        }
+
+        function downloadXmlFormat() {
+            let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<medicines>\n';
+            allMedicines.forEach(m => {
+                xml += `  <medicine id="${m.id}">\n`;
+                xml += `    <name>${escapeXml(m.name)}</name>\n`;
+                xml += `    <generic_name>${escapeXml(m.generic_name || '')}</generic_name>\n`;
+                xml += `    <category>${escapeXml(m.category || '')}</category>\n`;
+                xml += `    <price>${m.price}</price>\n`;
+                xml += `    <stock>${m.stock_quantity}</stock>\n`;
+                xml += `    <expiry>${m.expiry_date || ''}</expiry>\n`;
+                xml += `  </medicine>\n`;
+            });
+            xml += '</medicines>';
+
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'medicines_inventory.xml';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function escapeXml(unsafe) {
+            return String(unsafe).replace(/[<>&'"]/g, c => {
+                switch (c) {
+                    case '<': return '&lt;';
+                    case '>': return '&gt;';
+                    case '&': return '&amp;';
+                    case '\'': return '&apos;';
+                    case '"': return '&quot;';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

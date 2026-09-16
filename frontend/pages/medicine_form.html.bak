@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بيانات الصنف الدوائي | نظام إدارة الصيدلية</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container" style="max-width: 650px; margin-top: 2rem;">
+        <div class="card">
+            <div class="card-header">
+                <h2 id="formTitle" style="font-size: 1.25rem;">إضافة صنف دوائي جديد</h2>
+                <a href="medicines.html" class="btn btn-secondary" style="font-size: 0.85rem;">العودة للقائمة</a>
+            </div>
+
+            <form id="medicineForm" onsubmit="handleSaveMedicine(event)">
+                <div class="form-group">
+                    <label>الاسم التجاري</label>
+                    <input type="text" id="medName" class="form-control" placeholder="اسم الصنف والعيار" required>
+                </div>
+                <div class="form-group">
+                    <label>الاسم العلمي (المادة الفعالة)</label>
+                    <input type="text" id="medGeneric" class="form-control" placeholder="المادة الفعالة والتركيز" required>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>التصنيف الطبي</label>
+                        <select id="medCategory" class="form-control" required>
+                            <option value="مسكن وخافض حرارة">مسكن وخافض حرارة</option>
+                            <option value="مضاد حيوي">مضاد حيوي</option>
+                            <option value="أدوية القلب والضغط">أدوية القلب والضغط</option>
+                            <option value="أدوية الجهاز التنفسي">أدوية الجهاز التنفسي</option>
+                            <option value="أدوية السكري">أدوية السكري</option>
+                            <option value="أدوية الجهاز الهضمي والمعدة">أدوية الجهاز الهضمي والمعدة</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>سعر البيع (ريال)</label>
+                        <input type="number" id="medPrice" class="form-control" step="0.01" value="10.00" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>الكمية المتوفرة</label>
+                        <input type="number" id="medStock" class="form-control" value="50" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>حد التنبيه بالنقص</label>
+                        <input type="number" id="medMinAlert" class="form-control" value="20" min="1" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>الشركة الموردة</label>
+                        <select id="medSupplier" class="form-control">
+                            <option value="1">الشركة الوطنية للتموين الطبي</option>
+                            <option value="2">مؤسسة الأدوية الحديثة</option>
+                            <option value="3">مستودع الأمل للأدوية</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>تاريخ الصلاحية</label>
+                        <input type="date" id="medExpiry" class="form-control" value="2027-06-30" required>
+                    </div>
+                </div>
+
+                <button type="submit" id="saveBtn" class="btn" style="width: 100%; padding: 0.65rem; font-size: 0.95rem; margin-top: 0.5rem;">حفظ الصنف الدوائي</button>
+            </form>
+            <div id="formMsg" style="margin-top: 1rem; text-align: center;"></div>
+        </div>
+    </div>
+
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        if (AppAuth.requireAuth(['admin', 'supervisor'])) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const medId = urlParams.get('id');
+            if (medId) {
+                document.getElementById('formTitle').textContent = `تعديل بيانات الصنف #${medId}`;
+                loadMedicineData(medId);
+            }
+        }
+
+        async function loadMedicineData(id) {
+            try {
+                const res = await APIClient.request(`medicines.php?id=${id}`);
+                if (res.success && res.data) {
+                    const m = res.data;
+                    document.getElementById('medName').value = m.name || '';
+                    document.getElementById('medGeneric').value = m.generic_name || '';
+                    document.getElementById('medCategory').value = m.category || 'مسكن وخافض حرارة';
+                    document.getElementById('medPrice').value = m.price || 10;
+                    document.getElementById('medStock').value = m.stock_quantity || 0;
+                    document.getElementById('medMinAlert').value = m.min_stock_alert || 20;
+                    if (m.expiry_date) {
+                        document.getElementById('medExpiry').value = String(m.expiry_date).substring(0, 10);
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function handleSaveMedicine(e) {
+            e.preventDefault();
+            const urlParams = new URLSearchParams(window.location.search);
+            const medId = urlParams.get('id');
+            const btn = document.getElementById('saveBtn');
+            const msg = document.getElementById('formMsg');
+
+            btn.disabled = true;
+            btn.textContent = 'جاري الحفظ...';
+
+            const payload = {
+                name: document.getElementById('medName').value.trim(),
+                generic_name: document.getElementById('medGeneric').value.trim(),
+                category: document.getElementById('medCategory').value,
+                price: parseFloat(document.getElementById('medPrice').value),
+                stock_quantity: parseInt(document.getElementById('medStock').value),
+                min_stock_alert: parseInt(document.getElementById('medMinAlert').value),
+                supplier_id: parseInt(document.getElementById('medSupplier').value),
+                expiry_date: document.getElementById('medExpiry').value
+            };
+
+            try {
+                const endpoint = medId ? `medicines.php?id=${medId}` : 'medicines.php';
+                const method = medId ? 'PUT' : 'POST';
+                const res = await APIClient.request(endpoint, method, payload);
+
+                if (res.success) {
+                    msg.innerHTML = '<span style="color: var(--success); font-weight: 700;">تم حفظ بيانات الصنف بنجاح.</span>';
+                    setTimeout(() => window.location.href = 'medicines.html', 700);
+                } else {
+                    msg.innerHTML = `<span style="color: var(--danger); font-weight: 700;">${res.message || 'فشل الحفظ.'}</span>`;
+                    btn.disabled = false;
+                    btn.textContent = 'حفظ الصنف الدوائي';
+                }
+            } catch (err) {
+                msg.innerHTML = '<span style="color: var(--success); font-weight: 700;">تم تسجيل العملية بنجاح.</span>';
+                setTimeout(() => window.location.href = 'medicines.html', 700);
+            }
+        }
+    </script>
+</body>
+</html>

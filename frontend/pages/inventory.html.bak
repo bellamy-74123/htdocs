@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة المخزون الدوائي | نظام إدارة الصيدلية الذكي</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/chatbot-widget.css">
+    <style>
+        .role-switcher-banner {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(15, 41, 66, 0.05) 100%);
+            border: 1px solid var(--border);
+            border-right: 4px solid var(--primary);
+            border-radius: var(--radius);
+            padding: 0.9rem 1.25rem;
+            margin-bottom: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .role-btn-group {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+        .role-btn {
+            padding: 0.35rem 0.85rem;
+            border-radius: var(--radius-full);
+            font-size: 0.82rem;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-main);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .role-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .role-btn.active-role-staff {
+            background: #0284c7;
+            color: #ffffff;
+            border-color: #0284c7;
+        }
+        .role-btn.active-role-supervisor {
+            background: #d97706;
+            color: #ffffff;
+            border-color: #d97706;
+        }
+        .role-btn.active-role-admin {
+            background: #dc2626;
+            color: #ffffff;
+            border-color: #dc2626;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            padding: 1rem;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            width: 100%;
+            max-width: 620px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            padding: 1.5rem;
+        }
+        .web-search-box {
+            background: var(--bg-hover);
+            border: 1.5px dashed var(--primary);
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .online-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #059669;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+        .online-dot {
+            width: 7px;
+            height: 7px;
+            background: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #10b981;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <!-- Live Role Switcher Banner -->
+        <div class="role-switcher-banner">
+            <div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-weight: 800; font-size: 0.95rem; color: var(--text-main);">الصلاحية الحالية النشطة:</span>
+                    <span id="currentRoleBadge" style="padding: 2px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 800; background: #0284c7; color: #ffffff;">صيدلي</span>
+                </div>
+                <div id="currentRoleDesc" style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.2rem;">
+                    صلاحيات الصيدلي: استعراض المخزون وطلب توريد الأدوية النافذة والمنخفضة.
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">تبديل الصلاحية للتجربة:</span>
+                <div class="role-btn-group">
+                    <button class="role-btn active-role-staff" onclick="switchUserRole('staff')">صيدلي (طلب أدوية)</button>
+                    <button class="role-btn" onclick="switchUserRole('supervisor')">مدير الصيدلية (إضافة + حذف)</button>
+                    <button class="role-btn" onclick="switchUserRole('admin')">مدير النظام (تعديل بيانات)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventory Header & Action Cards -->
+        <div class="card" style="padding: 1.5rem; margin-bottom: 1.25rem;">
+            <div class="card-header" style="margin-bottom: 1rem;">
+                <div>
+                    <h2 style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0;">المخزون الدوائي المركزي</h2>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.25rem;">متابعة أرصدة الأصناف، تنبيهات إعادة الطلب الذكية (ROP)، وطلبات التوريد المباشرة.</p>
+                </div>
+                <div id="inventoryHeaderActions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Dynamically populated based on active role -->
+                </div>
+            </div>
+
+            <!-- Inventory KPIs -->
+            <div class="kpi-grid" style="margin-bottom: 1.25rem;">
+                <div class="kpi-card kpi-primary">
+                    <div class="kpi-title">إجمالي الأصناف بالمخزن</div>
+                    <div class="kpi-value" id="invTotalMeds">121 صنف</div>
+                    <div class="kpi-sub" style="color: var(--primary);">10 مجموعات علاجية</div>
+                </div>
+                <div class="kpi-card kpi-danger">
+                    <div class="kpi-title">أصناف نافدة (رصيد = 0)</div>
+                    <div class="kpi-value" id="invOutStock" style="color: var(--danger);">0 صنف</div>
+                    <div class="kpi-sub" style="color: var(--danger);">تتطلب طلب توريد فوري</div>
+                </div>
+                <div class="kpi-card kpi-warning">
+                    <div class="kpi-title">أصناف قاربت على النفاد (≤20)</div>
+                    <div class="kpi-value" id="invLowStock" style="color: var(--warning);">18 صنف</div>
+                    <div class="kpi-sub" style="color: var(--warning);">تحت حد الأمان ROP</div>
+                </div>
+                <div class="kpi-card kpi-success">
+                    <div class="kpi-title">القيمة التقديرية للمخزون</div>
+                    <div class="kpi-value" id="invTotalValue" style="color: var(--success); font-size: 1.4rem;">142,850 ريال</div>
+                    <div class="kpi-sub" style="color: var(--text-muted);">حساب فوري للأرصدة</div>
+                </div>
+            </div>
+
+            <!-- Search and Filters -->
+            <div style="display: flex; gap: 0.6rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                <input type="text" id="invSearchInput" class="form-control" style="flex: 2; min-width: 260px; font-weight: 600;" placeholder="بحث في المخزون بالاسم التجاري، المادة الفعالة، أو الباركود..." oninput="handleInventorySearch(this.value)">
+                <select id="invStockFilter" class="form-control" style="flex: 1; min-width: 160px; font-weight: 700;" onchange="applyInventoryFilters()">
+                    <option value="all">جميع حالات المخزون</option>
+                    <option value="critical">أصناف حرجة وشك النفاد (≤15)</option>
+                    <option value="low">أصناف منخفضة (16-30)</option>
+                    <option value="safe">أصناف مستقرة وآمنة (>30)</option>
+                </select>
+                <select id="invCategoryFilter" class="form-control" style="flex: 1.2; min-width: 180px; font-weight: 700;" onchange="applyInventoryFilters()">
+                    <option value="all">كافة المجموعات العلاجية</option>
+                    <option value="gastrointestinal">جهاز هضمي ومعدة</option>
+                    <option value="analgesic">مسكنات وخافضات حرارة</option>
+                    <option value="nsaid">مضادات التهاب ومفاصل</option>
+                    <option value="cardio">أدوية القلب وضغط الدم</option>
+                    <option value="diabetes">أدوية السكري والغدد</option>
+                    <option value="respiratory">جهاز تنفسي وحساسية</option>
+                    <option value="antibiotic">مضادات حيوية وميكروبية</option>
+                    <option value="cns">جهاز عصبي ونفسية</option>
+                    <option value="vitamins">فيتامينات ومكملات</option>
+                    <option value="derm">جلدية وعيون ومسالك</option>
+                </select>
+                <button class="btn btn-secondary" onclick="resetInventoryFilters()">إعادة ضبط</button>
+            </div>
+
+            <!-- Inventory Table -->
+            <div style="overflow-x: auto;">
+                <table style="margin-top: 0.5rem;">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>الصنف التجاري</th>
+                            <th>المادة الفعالة (Generic)</th>
+                            <th>التصنيف</th>
+                            <th>الرصيد بالمخزن</th>
+                            <th>حد ROP (AI)</th>
+                            <th>موقع الرف</th>
+                            <th>سعر البيع</th>
+                            <th>الصلاحية</th>
+                            <th style="text-align: center; min-width: 160px;">الإجراءات المتاحة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventoryTableBody">
+                        <tr><td colspan="10" style="text-align: center; padding: 2rem; color: var(--text-muted);">جاري تحميل بيانات المخزون...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 1: Reorder Request Modal (For Pharmacist & All Roles) -->
+    <div id="reorderModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">طلب توريد دواء للمخزون</h3>
+                <button onclick="closeModal('reorderModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <form onsubmit="handleReorderSubmit(event)">
+                <input type="hidden" id="reorderMedId">
+                <div class="form-group" style="margin-bottom: 0.85rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">الدواء المطلوب</label>
+                    <input type="text" id="reorderMedName" class="form-control" readonly style="background: var(--bg-hover); font-weight: 700;">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الرصيد الحالي بالمخزن</label>
+                        <input type="text" id="reorderCurrentStock" class="form-control" readonly style="background: var(--bg-hover);">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الكمية المقترحة من AI</label>
+                        <input type="text" id="reorderAiSuggested" class="form-control" readonly style="background: var(--bg-hover); color: var(--primary); font-weight: 800;">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الكمية المطلوبة للطلب (علبة)</label>
+                        <input type="number" id="reorderQuantity" class="form-control" min="1" value="50" required style="font-weight: 800;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">مستوى الأولوية</label>
+                        <select id="reorderPriority" class="form-control" style="font-weight: 700;">
+                            <option value="urgent">عاجل جداً (خلال 24 ساعة)</option>
+                            <option value="normal" selected>عادي (خلال 3 أيام)</option>
+                            <option value="scheduled">دوري مع الطلبية الأسبوعية</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">المورد المقترح / ملاحظات التوريد</label>
+                    <select id="reorderSupplier" class="form-control" style="margin-bottom: 0.5rem;">
+                        <option value="1">الشركة الوطنية للتموين الطبي الموحد</option>
+                        <option value="2">مؤسسة الأدوية والمستلزمات الطبية الحديثة</option>
+                        <option value="3">مستودع الأمل الدوائي المركزي</option>
+                    </select>
+                    <textarea id="reorderNotes" class="form-control" rows="2" placeholder="أي ملاحظات أو اشتراطات خاصة بالتشغيلة أو التبريد..."></textarea>
+                </div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('reorderModal')">إلغاء</button>
+                    <button type="submit" class="btn btn-pos" style="padding: 0.55rem 1.4rem;">إرسال طلب التوريد للمشتريات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: Add Medicine with Online Web Generic Search (Pharmacy Manager) -->
+    <div id="addMedicineModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">إضافة صنف دوائي جديد للمخزون</h3>
+                    <span style="font-size: 0.78rem; color: var(--text-muted);">خاصية البحث والربط الذكي بالاسم العلمي عبر الويب</span>
+                </div>
+                <button onclick="closeModal('addMedicineModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+
+            <!-- Web Generic Search Box -->
+            <div class="web-search-box">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span style="font-size: 0.85rem; font-weight: 800; color: var(--primary);">البحث بالاسم العلمي عبر الويب (Online Generic Search):</span>
+                    <span class="online-badge"><span class="online-dot"></span> متصل بالإنترنت</span>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="webGenericQuery" class="form-control" placeholder="اكتب الاسم العلمي (مثال: Paracetamol, Atorvastatin, Metformin, Concor)..." style="flex: 1; font-weight: 600;" onkeydown="if(event.key==='Enter'){event.preventDefault();searchGenericOnline();}">
+                    <button type="button" class="btn" style="padding: 0.45rem 1rem;" onclick="searchGenericOnline()">بحث بالويب</button>
+                </div>
+                <div id="webSearchResults" style="margin-top: 0.6rem; display: none; font-size: 0.8rem;"></div>
+            </div>
+
+            <form onsubmit="handleAddMedicineSubmit(event)">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الاسم العلمي (المادة الفعالة)</label>
+                        <input type="text" id="newMedGeneric" class="form-control" placeholder="مثال: Bisoprolol / بيسوبرولول" required>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الاسم التجاري (مبني على العلمي)</label>
+                        <input type="text" id="newMedName" class="form-control" placeholder="مثال: Concor 5mg (كونكور)" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المجموعة العلاجية</label>
+                        <select id="newMedCategory" class="form-control" required>
+                            <option value="أدوية الجهاز الهضمي والمعدة">أدوية الجهاز الهضمي والمعدة</option>
+                            <option value="مسكنات وخافضات حرارة">مسكنات وخافضات حرارة</option>
+                            <option value="مسكنات ومضادات التهاب">مسكنات ومضادات التهاب</option>
+                            <option value="أدوية القلب وضغط الدم">أدوية القلب وضغط الدم</option>
+                            <option value="أدوية السكري والغدد">أدوية السكري والغدد</option>
+                            <option value="أدوية الجهاز التنفسي والحساسية">أدوية الجهاز التنفسي والحساسية</option>
+                            <option value="مضادات حيوية وميكروبية">مضادات حيوية وميكروبية</option>
+                            <option value="أدوية الجهاز العصبي والنفسية">أدوية الجهاز العصبي والنفسية</option>
+                            <option value="الفيتامينات والمكملات الغذائية">الفيتامينات والمكملات الغذائية</option>
+                            <option value="أدوية الجلدية والعيون والمسالك">أدوية الجلدية والعيون والمسالك</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">سعر البيع (ريال)</label>
+                        <input type="number" id="newMedPrice" class="form-control" step="0.01" value="25.00" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الكمية المستلمة بالمخزن</label>
+                        <input type="number" id="newMedStock" class="form-control" value="60" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">موقع الرف</label>
+                        <input type="text" id="newMedLocation" class="form-control" value="رف B3" placeholder="مثال: رف A1">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">تاريخ الصلاحية</label>
+                        <input type="date" id="newMedExpiry" class="form-control" value="2027-12-31" required>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addMedicineModal')">إلغاء</button>
+                    <button type="submit" class="btn" style="padding: 0.55rem 1.4rem;">إضافة الصنف للمخزون</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: Edit Medicine Data Modal (System Admin) -->
+    <div id="editMedicineModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800;">تعديل بيانات الصنف الدوائي (صلاحية مدير النظام)</h3>
+                <button onclick="closeModal('editMedicineModal')" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <form onsubmit="handleEditMedicineSubmit(event)">
+                <input type="hidden" id="editMedId">
+                <div class="form-group" style="margin-bottom: 0.85rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">اسم الصنف التجاري</label>
+                    <input type="text" id="editMedName" class="form-control" required style="font-weight: 700;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0.85rem;">
+                    <label style="font-weight: 700; font-size: 0.85rem;">المادة الفعالة (الاسم العلمي)</label>
+                    <input type="text" id="editMedGeneric" class="form-control" required>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">المجموعة العلاجية</label>
+                        <select id="editMedCategory" class="form-control" required>
+                            <option value="أدوية الجهاز الهضمي والمعدة">أدوية الجهاز الهضمي والمعدة</option>
+                            <option value="مسكنات وخافضات حرارة">مسكنات وخافضات حرارة</option>
+                            <option value="مسكنات ومضادات التهاب">مسكنات ومضادات التهاب</option>
+                            <option value="أدوية القلب وضغط الدم">أدوية القلب وضغط الدم</option>
+                            <option value="أدوية السكري والغدد">أدوية السكري والغدد</option>
+                            <option value="أدوية الجهاز التنفسي والحساسية">أدوية الجهاز التنفسي والحساسية</option>
+                            <option value="مضادات حيوية وميكروبية">مضادات حيوية وميكروبية</option>
+                            <option value="أدوية الجهاز العصبي والنفسية">أدوية الجهاز العصبي والنفسية</option>
+                            <option value="الفيتامينات والمكملات الغذائية">الفيتامينات والمكملات الغذائية</option>
+                            <option value="أدوية الجلدية والعيون والمسالك">أدوية الجلدية والعيون والمسالك</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">سعر الوحدة (ريال)</label>
+                        <input type="number" id="editMedPrice" class="form-control" step="0.01" required style="font-weight: 800;">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">الرصيد بالمخزن</label>
+                        <input type="number" id="editMedStock" class="form-control" min="0" required style="font-weight: 800;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">موقع الرف</label>
+                        <input type="text" id="editMedLocation" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight: 700; font-size: 0.85rem;">تاريخ الصلاحية</label>
+                        <input type="date" id="editMedExpiry" class="form-control" required>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('editMedicineModal')">إلغاء</button>
+                    <button type="submit" class="btn btn-pos" style="padding: 0.55rem 1.4rem;">حفظ التعديلات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        let inventoryList = [];
+        let currentRole = 'staff';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const userRole = AppAuth.getNormalizedRole() || 'staff';
+            currentRole = userRole;
+            updateRoleUI();
+            await loadInventoryData();
+        });
+
+        function switchUserRole(role) {
+            currentRole = role;
+            const roleUserMap = {
+                'staff': { username: 'الصيدلي المسؤول', role: 'staff', email: 'staff@hospital.local' },
+                'supervisor': { username: 'مدير الصيدلية', role: 'supervisor', email: 'supervisor@hospital.local' },
+                'admin': { username: 'مدير النظام', role: 'admin', email: 'admin@hospital.local' }
+            };
+            localStorage.setItem('user_data', JSON.stringify(roleUserMap[role]));
+            AppAuth.renderNavbar();
+            updateRoleUI();
+            renderInventoryTable(inventoryList);
+
+            const labels = {
+                'staff': 'صيدلي: تم تفعيل إمكانية استعراض المخزون وطلب توريد الأدوية.',
+                'supervisor': 'مدير الصيدلية: تم تفعيل صلاحيات إضافة أصناف جديدة وحذف الأدوية.',
+                'admin': 'مدير النظام: تم تفعيل صلاحيات تعديل بيانات وأسعار الأدوية.'
+            };
+            showNotification(labels[role], 'info');
+        }
+
+        function updateRoleUI() {
+            const badge = document.getElementById('currentRoleBadge');
+            const desc = document.getElementById('currentRoleDesc');
+            const headerActions = document.getElementById('inventoryHeaderActions');
+            const btns = document.querySelectorAll('.role-btn');
+
+            btns.forEach(b => {
+                b.className = 'role-btn';
+                if (b.textContent.includes('صيدلي') && currentRole === 'staff') b.classList.add('active-role-staff');
+                if (b.textContent.includes('مدير الصيدلية') && currentRole === 'supervisor') b.classList.add('active-role-supervisor');
+                if (b.textContent.includes('مدير النظام') && currentRole === 'admin') b.classList.add('active-role-admin');
+            });
+
+            if (currentRole === 'admin') {
+                badge.textContent = 'مدير النظام (Admin)';
+                badge.style.background = '#dc2626';
+                desc.textContent = 'صلاحية مدير النظام: تعديل بيانات وأسعار وتفاصيل ومواقع الأدوية بالمخزون.';
+                headerActions.innerHTML = `
+                    <button class="btn btn-secondary" onclick="exportInventoryXml()">تصدير تقرير المخزون</button>
+                `;
+            } else if (currentRole === 'supervisor') {
+                badge.textContent = 'مدير الصيدلية (Manager)';
+                badge.style.background = '#d97706';
+                desc.textContent = 'صلاحية مدير الصيدلية: إضافة أصناف جديدة مع البحث بالاسم العلمي عبر الويب، وحذف الأدوية.';
+                headerActions.innerHTML = `
+                    <button class="btn" onclick="openAddMedicineModal()" style="font-weight: 800;">+ إضافة دواء جديد بالويب</button>
+                    <button class="btn btn-secondary" onclick="exportInventoryXml()">تصدير المخزون</button>
+                `;
+            } else {
+                badge.textContent = 'صيدلي (Pharmacist)';
+                badge.style.background = '#0284c7';
+                desc.textContent = 'صلاحية الصيدلي: استعراض المخزون الحي وطلب توريد الأدوية النافذة أو المنخفضة.';
+                headerActions.innerHTML = `
+                    <button class="btn btn-secondary" onclick="exportInventoryXml()">تصدير المخزون</button>
+                `;
+            }
+        }
+
+        async function loadInventoryData() {
+            try {
+                if (window.APIClient && typeof window.APIClient.getMedicines === 'function') {
+                    const res = await window.APIClient.getMedicines();
+                    if (res && res.length > 0) {
+                        inventoryList = res;
+                        updateKpis();
+                        renderInventoryTable(inventoryList);
+                        return;
+                    }
+                }
+            } catch (e) {}
+
+            inventoryList = (typeof DEMO_MEDICINES !== 'undefined' && DEMO_MEDICINES.length > 0) ? [...DEMO_MEDICINES] : [];
+            updateKpis();
+            renderInventoryTable(inventoryList);
+        }
+
+        function updateKpis() {
+            let total = inventoryList.length;
+            let outStock = inventoryList.filter(m => parseInt(m.stock_quantity || 0) === 0).length;
+            let lowStock = inventoryList.filter(m => {
+                const s = parseInt(m.stock_quantity || 0);
+                return s > 0 && s <= 20;
+            }).length;
+            let totalValue = inventoryList.reduce((sum, m) => sum + (parseFloat(m.price || 0) * parseInt(m.stock_quantity || 0)), 0);
+
+            document.getElementById('invTotalMeds').textContent = `${total} صنف`;
+            document.getElementById('invOutStock').textContent = `${outStock} صنف`;
+            document.getElementById('invLowStock').textContent = `${lowStock} صنف`;
+            document.getElementById('invTotalValue').textContent = `${Math.round(totalValue).toLocaleString()} ريال`;
+        }
+
+        function renderInventoryTable(list) {
+            const tbody = document.getElementById('inventoryTableBody');
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">لا توجد أصناف مطابقة للبحث أو الفلترة في المخزون.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = list.map(m => {
+                const stock = parseInt(m.stock_quantity || 0);
+                const rop = Math.max(15, Math.ceil((m.price % 7) * 4 + 12));
+                const shelf = m.location || `رف ${chrFromId(m.id)}${(m.id % 6) + 1}`;
+
+                let stockBadge = `<span class="badge badge-success" style="font-weight: 800;">${stock} علبة</span>`;
+                if (stock === 0) {
+                    stockBadge = `<span class="badge badge-danger" style="font-weight: 800;">نافد (0)</span>`;
+                } else if (stock <= 15) {
+                    stockBadge = `<span class="badge badge-danger" style="font-weight: 800;">حرج (${stock})</span>`;
+                } else if (stock <= 30) {
+                    stockBadge = `<span class="badge badge-warning" style="font-weight: 800;">منخفض (${stock})</span>`;
+                }
+
+                let actionsHtml = '';
+
+                // 1. Pharmacist Action: Reorder Request
+                const isReorderUrgent = (stock <= 20);
+                const reorderBtnClass = isReorderUrgent ? 'btn btn-pos' : 'btn btn-secondary';
+                actionsHtml += `<button class="${reorderBtnClass}" style="padding: 0.2rem 0.6rem; font-size: 0.76rem;" onclick="openReorderModal(${m.id})" title="طلب توريد هذا الدواء">+ طلب توريد</button>`;
+
+                // 2. Pharmacy Manager Actions: Delete medicine
+                if (currentRole === 'supervisor') {
+                    actionsHtml += `<button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.76rem; color: var(--danger); border-color: rgba(220,38,38,0.3);" onclick="deleteMedicine(${m.id})" title="حذف الدواء من المخزون">حذف</button>`;
+                }
+
+                // 3. System Admin Actions: Edit medicine details
+                if (currentRole === 'admin') {
+                    actionsHtml += `<button class="btn btn-secondary" style="padding: 0.2rem 0.55rem; font-size: 0.76rem;" onclick="openEditMedicineModal(${m.id})" title="تعديل بيانات الصنف">تعديل البيانات</button>`;
+                }
+
+                return `
+                    <tr>
+                        <td style="font-weight: 700; color: var(--text-muted);">#${m.id}</td>
+                        <td>
+                            <strong style="color: var(--text-main); font-size: 0.93rem;">${m.name}</strong>
+                            ${m.barcode ? `<div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">${m.barcode}</div>` : ''}
+                        </td>
+                        <td><code style="font-size: 0.82rem;">${m.generic_name || '-'}</code></td>
+                        <td><span style="font-size: 0.82rem; color: var(--text-muted);">${m.category || 'عام'}</span></td>
+                        <td>${stockBadge}</td>
+                        <td><span style="font-weight: 800; color: var(--primary); font-size: 0.85rem;">${rop} علبة</span></td>
+                        <td><span style="font-weight: 700; font-size: 0.82rem; color: var(--text-muted);">${shelf}</span></td>
+                        <td><strong style="color: var(--text-main); font-size: 0.92rem;">${parseFloat(m.price || 0).toFixed(2)}</strong> ريال</td>
+                        <td style="font-size: 0.82rem; color: var(--text-muted);">${m.expiry_date ? String(m.expiry_date).substring(0, 10) : '2027-10-15'}</td>
+                        <td style="text-align: center;">
+                            <div style="display: inline-flex; gap: 0.3rem; align-items: center; justify-content: center;">
+                                ${actionsHtml}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function chrFromId(id) {
+            return String.fromCharCode(65 + ((id || 1) % 6));
+        }
+
+        function openReorderModal(medId) {
+            const med = inventoryList.find(x => x.id === medId);
+            if (!med) return;
+
+            document.getElementById('reorderMedId').value = med.id;
+            document.getElementById('reorderMedName').value = `${med.name} (${med.generic_name || ''})`;
+            document.getElementById('reorderCurrentStock').value = `${med.stock_quantity || 0} علبة`;
+            
+            const currentStock = parseInt(med.stock_quantity || 0);
+            const aiSuggested = Math.max(40, 80 - currentStock);
+            document.getElementById('reorderAiSuggested').value = `${aiSuggested} علبة (تغطية 30 يوم)`;
+            document.getElementById('reorderQuantity').value = aiSuggested;
+
+            document.getElementById('reorderModal').classList.add('active');
+        }
+
+        function handleReorderSubmit(e) {
+            e.preventDefault();
+            const medName = document.getElementById('reorderMedName').value;
+            const qty = document.getElementById('reorderQuantity').value;
+            const supplier = document.getElementById('reorderSupplier').selectedOptions[0].text;
+
+            closeModal('reorderModal');
+            showNotification(`تم إرسال طلب توريد [${qty} علبة] من ${medName} إلى ${supplier} بنجاح!`, 'success');
+        }
+
+        function openAddMedicineModal() {
+            if (currentRole !== 'supervisor') {
+                showNotification('عذراً، إضافة الأصناف الجديدة مقتصرة على صلاحية مدير الصيدلية.', 'warning');
+                return;
+            }
+            document.getElementById('webGenericQuery').value = '';
+            document.getElementById('webSearchResults').style.display = 'none';
+            document.getElementById('addMedicineModal').classList.add('active');
+        }
+
+        async function searchGenericOnline() {
+            const q = document.getElementById('webGenericQuery').value.trim();
+            if (!q) {
+                showNotification('يرجى كتابة الاسم العلمي أولاً للبحث في قواعد البيانات العالمية.', 'warning');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('webSearchResults');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<span style="color: var(--primary); font-weight: 700;">جاري الاتصال بقواعد البيانات الدوائية العالمية عبر الويب...</span>';
+
+            try {
+                let foundItem = null;
+                const normQ = q.toLowerCase();
+
+                // 1. Search in global OpenFDA Web API
+                try {
+                    const openFdaUrl = `https://api.fda.gov/drug/label.json?search=openfda.generic_name:"${encodeURIComponent(q)}"&limit=1`;
+                    const res = await fetch(openFdaUrl);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.results && data.results.length > 0) {
+                            const r = data.results[0];
+                            const brandList = r.openfda?.brand_name || [q];
+                            const genericList = r.openfda?.generic_name || [q];
+                            const pharmClass = r.openfda?.pharm_class_epc ? r.openfda.pharm_class_epc[0] : 'أدوية علاجية عامة';
+                            foundItem = {
+                                generic_name_en: genericList[0],
+                                generic_name_ar: q,
+                                brand_raw: brandList.slice(0, 3).join(' / '),
+                                drug_class: pharmClass
+                            };
+                        }
+                    }
+                } catch (netErr) {}
+
+                // 2. Fallback in local knowledge base if offline/no exact FDA match
+                if (!foundItem && typeof DEMO_MEDICINES !== 'undefined') {
+                    foundItem = DEMO_MEDICINES.find(m => 
+                        (m.generic_name || '').toLowerCase().includes(normQ) ||
+                        (m.name || '').toLowerCase().includes(normQ)
+                    );
+                }
+
+                if (foundItem) {
+                    const genEn = foundItem.generic_name_en || foundItem.generic_name || q;
+                    const genAr = foundItem.generic_name_ar || q;
+                    const brand = foundItem.brand_raw || foundItem.name || `${q} 500mg`;
+                    const cat = foundItem.drug_class || foundItem.category || 'أدوية عامة';
+
+                    resultsDiv.innerHTML = `
+                        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem; margin-top: 0.35rem;">
+                            <div style="color: var(--success); font-weight: 800; margin-bottom: 0.25rem;">تم العثور على الدواء عبر الويب بنجاح:</div>
+                            <div>- المادة الفعالة: <b>${genEn} (${genAr})</b></div>
+                            <div>- الأسماء التجارية المبنية على العلمي: <b style="color: var(--primary);">${brand}</b></div>
+                            <div>- التصنيف الطبي: <b>${cat}</b></div>
+                            <button type="button" class="btn btn-pos" style="margin-top: 0.5rem; padding: 0.25rem 0.75rem; font-size: 0.78rem;" onclick="applyWebDrugData('${escapeJs(genEn)} / ${escapeJs(genAr)}', '${escapeJs(brand)}', '${escapeJs(cat)}')">تعبئة البيانات تلقائياً</button>
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div style="color: var(--text-muted); padding: 0.4rem 0;">
+                            تم اعتماد "${q}" كاسم علمي، وتم توليد الاسم التجاري المبدئي تلقائياً.
+                        </div>
+                    `;
+                    document.getElementById('newMedGeneric').value = q;
+                    document.getElementById('newMedName').value = `${q} 500mg`;
+                }
+            } catch (err) {
+                resultsDiv.innerHTML = `<span style="color: var(--danger);">تعذر إتمام البحث بالويب: ${err.message}</span>`;
+            }
+        }
+
+        function applyWebDrugData(generic, brand, category) {
+            document.getElementById('newMedGeneric').value = generic;
+            document.getElementById('newMedName').value = brand;
+            
+            const catSelect = document.getElementById('newMedCategory');
+            for (let opt of catSelect.options) {
+                if (category.includes(opt.value) || opt.value.includes(category)) {
+                    catSelect.value = opt.value;
+                    break;
+                }
+            }
+            showNotification('تم تعبئة الاسم التجاري والمادة الفعالة والتصنيف بناءً على نتائج الويب!', 'success');
+        }
+
+        function escapeJs(str) {
+            return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        function handleAddMedicineSubmit(e) {
+            e.preventDefault();
+            if (currentRole !== 'supervisor') {
+                showNotification('عذراً، إضافة الأدوية مقتصرة على صلاحية مدير الصيدلية فقط.', 'warning');
+                return;
+            }
+
+            const newId = inventoryList.length > 0 ? Math.max(...inventoryList.map(x => x.id || 0)) + 1 : 1;
+            const newMed = {
+                id: newId,
+                name: document.getElementById('newMedName').value.trim(),
+                generic_name: document.getElementById('newMedGeneric').value.trim(),
+                category: document.getElementById('newMedCategory').value,
+                price: parseFloat(document.getElementById('newMedPrice').value || 10.0),
+                stock_quantity: parseInt(document.getElementById('newMedStock').value || 50),
+                location: document.getElementById('newMedLocation').value.trim() || 'رف A1',
+                expiry_date: document.getElementById('newMedExpiry').value,
+                barcode: `628${100000000 + newId}`
+            };
+
+            inventoryList.unshift(newMed);
+            updateKpis();
+            renderInventoryTable(inventoryList);
+            closeModal('addMedicineModal');
+            showNotification(`تمت إضافة دواء [${newMed.name}] إلى المخزون بنجاح (بصلاحية مدير الصيدلية)!`, 'success');
+        }
+
+        function deleteMedicine(medId) {
+            if (currentRole !== 'supervisor') {
+                showNotification('عذراً، حذف الأدوية من المخزون مقتصر على صلاحية مدير الصيدلية فقط.', 'warning');
+                return;
+            }
+
+            const med = inventoryList.find(x => x.id === medId);
+            if (!med) return;
+
+            if (confirm(`هل أنت متأكد من حذف دواء "${med.name}" نهائياً من المخزون؟\n(هذا الإجراء متاح لمدير الصيدلية فقط)`)) {
+                inventoryList = inventoryList.filter(x => x.id !== medId);
+                updateKpis();
+                renderInventoryTable(inventoryList);
+                showNotification(`تم حذف دواء [${med.name}] من المخزون بنجاح.`, 'success');
+            }
+        }
+
+        function openEditMedicineModal(medId) {
+            if (currentRole !== 'admin') {
+                showNotification('عذراً، تعديل بيانات وأسعار الأدوية مقتصر على صلاحية مدير النظام فقط.', 'warning');
+                return;
+            }
+
+            const med = inventoryList.find(x => x.id === medId);
+            if (!med) return;
+
+            document.getElementById('editMedId').value = med.id;
+            document.getElementById('editMedName').value = med.name || '';
+            document.getElementById('editMedGeneric').value = med.generic_name || '';
+            document.getElementById('editMedCategory').value = med.category || 'أدوية عامة';
+            document.getElementById('editMedPrice').value = parseFloat(med.price || 10.0).toFixed(2);
+            document.getElementById('editMedStock').value = parseInt(med.stock_quantity || 0);
+            document.getElementById('editMedLocation').value = med.location || 'رف A1';
+            document.getElementById('editMedExpiry').value = med.expiry_date ? String(med.expiry_date).substring(0, 10) : '2027-10-15';
+
+            document.getElementById('editMedicineModal').classList.add('active');
+        }
+
+        function handleEditMedicineSubmit(e) {
+            e.preventDefault();
+            if (currentRole !== 'admin') {
+                showNotification('عذراً، تعديل البيانات مقتصر على صلاحية مدير النظام فقط.', 'warning');
+                return;
+            }
+
+            const id = parseInt(document.getElementById('editMedId').value);
+            const medIndex = inventoryList.findIndex(x => x.id === id);
+
+            if (medIndex !== -1) {
+                inventoryList[medIndex].name = document.getElementById('editMedName').value.trim();
+                inventoryList[medIndex].generic_name = document.getElementById('editMedGeneric').value.trim();
+                inventoryList[medIndex].category = document.getElementById('editMedCategory').value;
+                inventoryList[medIndex].price = parseFloat(document.getElementById('editMedPrice').value || 10.0);
+                inventoryList[medIndex].stock_quantity = parseInt(document.getElementById('editMedStock').value || 0);
+                inventoryList[medIndex].location = document.getElementById('editMedLocation').value.trim();
+                inventoryList[medIndex].expiry_date = document.getElementById('editMedExpiry').value;
+
+                updateKpis();
+                renderInventoryTable(inventoryList);
+                closeModal('editMedicineModal');
+                showNotification(`تم حفظ وتحديث بيانات دواء [${inventoryList[medIndex].name}] بنجاح (بصلاحية مدير النظام)!`, 'success');
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        function handleInventorySearch(val) {
+            applyInventoryFilters();
+        }
+
+        function applyInventoryFilters() {
+            const q = (document.getElementById('invSearchInput').value || '').trim().toLowerCase();
+            const stockFilter = document.getElementById('invStockFilter').value;
+            const catFilter = document.getElementById('invCategoryFilter').value;
+
+            let filtered = [...inventoryList];
+
+            if (q) {
+                filtered = filtered.filter(m => 
+                    (m.name || '').toLowerCase().includes(q) ||
+                    (m.generic_name || '').toLowerCase().includes(q) ||
+                    (m.barcode || '').toLowerCase().includes(q) ||
+                    String(m.id) === q
+                );
+            }
+
+            if (stockFilter !== 'all') {
+                filtered = filtered.filter(m => {
+                    const s = parseInt(m.stock_quantity || 0);
+                    if (stockFilter === 'critical') return s <= 15;
+                    if (stockFilter === 'low') return s >= 16 && s <= 30;
+                    if (stockFilter === 'safe') return s > 30;
+                    return true;
+                });
+            }
+
+            if (catFilter !== 'all') {
+                filtered = filtered.filter(m => {
+                    const c = (m.category || '').toLowerCase();
+                    if (catFilter === 'gastrointestinal') return c.includes('هضم') || c.includes('معدة') || c.includes('قولون') || c.includes('ppi');
+                    if (catFilter === 'analgesic') return c.includes('مسكن') || c.includes('حرارة');
+                    if (catFilter === 'nsaid') return c.includes('التهاب') || c.includes('مفاصل') || c.includes('عظام');
+                    if (catFilter === 'cardio') return c.includes('قلب') || c.includes('ضغط') || c.includes('كوليسترول') || c.includes('دهون') || c.includes('سيولة');
+                    if (catFilter === 'diabetes') return c.includes('سكر') || c.includes('غدد');
+                    if (catFilter === 'respiratory') return c.includes('تنفس') || c.includes('حساسية') || c.includes('ربو');
+                    if (catFilter === 'antibiotic') return c.includes('مضاد حيوي') || c.includes('ميكروب');
+                    if (catFilter === 'cns') return c.includes('نفسي') || c.includes('عصب') || c.includes('اكتئاب');
+                    if (catFilter === 'vitamins') return c.includes('فيتامين') || c.includes('مكمل') || c.includes('حديد');
+                    if (catFilter === 'derm') return c.includes('جلد') || c.includes('عين') || c.includes('مسالك');
+                    return true;
+                });
+            }
+
+            renderInventoryTable(filtered);
+        }
+
+        function resetInventoryFilters() {
+            document.getElementById('invSearchInput').value = '';
+            document.getElementById('invStockFilter').value = 'all';
+            document.getElementById('invCategoryFilter').value = 'all';
+            renderInventoryTable(inventoryList);
+        }
+
+        function exportInventoryXml() {
+            let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<inventory_export date="' + new Date().toISOString() + '">\n';
+            inventoryList.forEach(m => {
+                xml += `  <item id="${m.id}">\n`;
+                xml += `    <name>${escapeXml(m.name)}</name>\n`;
+                xml += `    <generic_name>${escapeXml(m.generic_name || '')}</generic_name>\n`;
+                xml += `    <category>${escapeXml(m.category || '')}</category>\n`;
+                xml += `    <stock>${m.stock_quantity || 0}</stock>\n`;
+                xml += `    <price>${m.price || 0}</price>\n`;
+                xml += `    <location>${escapeXml(m.location || '')}</location>\n`;
+                xml += `    <expiry>${m.expiry_date || ''}</expiry>\n`;
+                xml += `  </item>\n`;
+            });
+            xml += '</inventory_export>';
+
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'pharmacy_central_inventory.xml';
+            a.click();
+            URL.revokeObjectURL(url);
+            showNotification('تم تصدير تقرير المخزون المركزي بصيغة XML بنجاح!', 'info');
+        }
+
+        function escapeXml(unsafe) {
+            return String(unsafe).replace(/[<>&'"]/g, c => {
+                switch (c) {
+                    case '<': return '&lt;';
+                    case '>': return '&gt;';
+                    case '&': return '&amp;';
+                    case '\'': return '&apos;';
+                    case '"': return '&quot;';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

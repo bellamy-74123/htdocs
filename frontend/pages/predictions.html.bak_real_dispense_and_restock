@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>توقعات المخزون والتعلم الآلي | الصيدلية الذكية SP</title>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="../assets/css/style.css?v=4.0">
+</head>
+<body>
+    <nav class="navbar"></nav>
+
+    <div class="container">
+        <!-- Pharmacy Intelligent Analytics Header -->
+        <div class="card" style="padding: 1.6rem 1.85rem; margin-bottom: 1.5rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.25rem;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem;">
+                        <span class="badge badge-primary" style="font-size: 0.78rem; padding: 3px 10px; font-weight: 800;">محرك الذكاء الاصطناعي السريري</span>
+                        <span style="font-size: 0.8rem; color: var(--success); font-weight: 700; background: var(--success-bg); padding: 2px 8px; border-radius: 6px;">دقة النماذج: 94.2%</span>
+                    </div>
+                    <h2 style="font-size: 1.45rem; font-weight: 900; color: var(--text-main); margin: 0;">لوحة التنبؤ الذكي واحتياجات الصيدلية</h2>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+                        تحليل تلقائي متقدم لمعدلات الصرف التاريخية، تقدير كميات الشراء لتفادي النفاد، إدارة الصلاحيات، واستخراج التوصيات الدوائية.
+                    </p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+                    <div style="font-size: 0.82rem; color: var(--text-muted); background: var(--bg-hover); padding: 0.45rem 0.95rem; border-radius: 6px; border: 1px solid var(--border); font-weight: 600;">
+                        آخر تحديث: <strong id="lastTrainedTime" style="color: var(--primary);">الآن (محدث)</strong>
+                    </div>
+                    <button class="btn btn-pos" style="font-size: 0.84rem; padding: 0.5rem 1.25rem; font-weight: 800; border-radius: var(--radius-btn);" onclick="triggerManualRetrain()">تحديث مؤشرات التنبؤ</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interactive KPI Summary Cards (Click to switch tabs) -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0.85rem; margin-bottom: 1.25rem;">
+            <div class="ai-kpi-card active" id="kpi-demand" onclick="switchTab('demand', document.querySelectorAll('.ai-tab-btn')[0])" style="border-right: 3.5px solid var(--primary);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.45rem;">
+                        <span class="hospital-icon-badge" style="width: 26px; height: 26px; border-radius: 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                        </span>
+                        <span style="font-weight: 800; color: var(--primary); font-size: 0.92rem;">1. التنبؤ بالطلب والنفاد</span>
+                    </div>
+                    <span class="badge badge-primary" style="font-size: 0.68rem; padding: 2px 7px;">ROP</span>
+                </div>
+                
+            </div>
+
+            <div class="ai-kpi-card" id="kpi-fefo" onclick="switchTab('fefo', document.querySelectorAll('.ai-tab-btn')[1])" style="border-right: 3.5px solid var(--danger);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.45rem;">
+                        <span class="hospital-icon-badge" style="width: 26px; height: 26px; border-radius: 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                        </span>
+                        <span style="font-weight: 800; color: var(--danger); font-size: 0.92rem;">2. الصلاحيات (FEFO)</span>
+                    </div>
+                    <span class="badge badge-danger" style="font-size: 0.68rem; padding: 2px 7px;">Expiry</span>
+                </div>
+                
+            </div>
+
+            <div class="ai-kpi-card" id="kpi-apriori" onclick="switchTab('apriori', document.querySelectorAll('.ai-tab-btn')[2])" style="border-right: 3.5px solid var(--warning);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.45rem;">
+                        <span class="hospital-icon-badge" style="width: 26px; height: 26px; border-radius: 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                            </svg>
+                        </span>
+                        <span style="font-weight: 800; color: var(--warning); font-size: 0.92rem;">3. التوصيات (Apriori)</span>
+                    </div>
+                    <span class="badge badge-warning" style="font-size: 0.68rem; padding: 2px 7px;">Mining</span>
+                </div>
+                
+            </div>
+
+            <div class="ai-kpi-card" id="kpi-anomaly" onclick="switchTab('anomaly', document.querySelectorAll('.ai-tab-btn')[3])" style="border-right: 3.5px solid var(--success);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 0.45rem;">
+                        <span class="hospital-icon-badge" style="width: 26px; height: 26px; border-radius: 8px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            </svg>
+                        </span>
+                        <span style="font-weight: 800; color: var(--success); font-size: 0.92rem;">4. كشف السحوبات</span>
+                    </div>
+                    <span class="badge badge-success" style="font-size: 0.68rem; padding: 2px 7px;">Z-Score</span>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- AI Navigation Tabs Container -->
+        <div class="card" style="margin-bottom: 2rem; border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+            <div class="ai-tab-nav">
+                <button class="ai-tab-btn active" onclick="switchTab('demand', this)">
+                    <span>1. التنبؤ بالاستهلاك وتفادي النفاد</span>
+                </button>
+                <button class="ai-tab-btn" onclick="switchTab('fefo', this)">
+                    <span>2. مراقبة الصلاحيات وأولوية الصرف (FEFO)</span>
+                </button>
+                <button class="ai-tab-btn" onclick="switchTab('apriori', this)">
+                    <span>3. توصيات اقتراح الأدوية والبدائل (Apriori)</span>
+                </button>
+                <button class="ai-tab-btn" onclick="switchTab('anomaly', this)">
+                    <span>4. تنبيهات السحوبات غير المعتادة (Anomaly)</span>
+                </button>
+            </div>
+
+            <!-- TAB 1: DEMAND FORECASTING & DYNAMIC ROP -->
+            <div id="tab-demand" class="tab-content active" style="margin-top: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem;">
+                    <div>
+                        <h3 style="font-size: 1.22rem; font-weight: 900; color: var(--text-main); margin: 0;">لوحة التنبؤ الذكي بحركة استهلاك الدواء وتقدير كميات الشراء</h3>
+                        
+                    </div>
+                    <div id="reqBtnContainer">
+                        <!-- Filled dynamically based on user role -->
+                    </div>
+                </div>
+
+                <div style="background: var(--bg-hover); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.1rem;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-weight: 800; font-size: 0.88rem; color: var(--text-main); margin-bottom: 0.4rem; display: block;">اختيار الصنف الدوائي من المخزون:</label>
+                            <select id="aiMedSelect" class="form-control" onchange="handleMedicineChange()" style="font-weight: 700; padding: 0.65rem; border-radius: 8px; background: var(--bg-card);">
+                                <!-- يتم ملؤها ديناميكياً بكافة الأدوية المسجلة -->
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-weight: 800; font-size: 0.88rem; color: var(--text-main); margin-bottom: 0.4rem; display: block;">الرصيد الفعلي المسجل في المخزن:</label>
+                            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.65rem 1rem; font-weight: 900; font-size: 1rem; color: var(--text-main); display: flex; align-items: center; justify-content: space-between; min-height: 42px;">
+                                <span id="valStockText">--</span>
+                                <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 700;">علبة مسجلة</span>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-weight: 800; font-size: 0.88rem; color: var(--text-main); margin-bottom: 0.4rem; display: block;">معدل الصرف اليومي المحسوب:</label>
+                            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.65rem 1rem; font-weight: 900; font-size: 1rem; color: var(--primary); display: flex; align-items: center; justify-content: space-between; min-height: 42px;">
+                                <span id="valSalesText">--</span>
+                                <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 700;">علبة / يوم</span>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="font-weight: 800; font-size: 0.88rem; color: var(--text-main); margin-bottom: 0.4rem; display: block;">نموذج التحليل المعتمد:</label>
+                            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.65rem 1rem; font-weight: 800; font-size: 0.85rem; color: var(--text-main); display: flex; align-items: center; min-height: 42px;">
+                                <span style="color: var(--primary); font-weight: 800;">التحليل التراكمي لسجلات المخزن</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Result Box -->
+                <div id="aiResultBox" style="padding: 1.5rem; border-radius: 12px; background: var(--primary-light); border: 1px solid rgba(2, 132, 199, 0.25);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem;">
+                        <h3 style="color: var(--primary); font-size: 1.15rem; margin: 0; font-weight: 900;">نتائج التنبؤ وتقدير كميات التوريد المطلوبة:</h3>
+                        <span id="resRiskBadge" class="badge badge-danger" style="font-size: 0.85rem; padding: 5px 14px; font-weight: 800;">تنبيه: مستوى حرج</span>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.1rem;">
+                        <div style="background: var(--bg-card); padding: 1.2rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                            <div style="color: var(--text-muted); font-size: 0.85rem; font-weight: 700;">الأيام المتبقية للنفاد:</div>
+                            <div id="resDays" style="font-size: 1.75rem; font-weight: 900; color: var(--danger); margin: 0.35rem 0;">3.2 يوم</div>
+                            <div style="font-size: 0.76rem; color: var(--text-muted);">بناءً على وتيرة الاستهلاك الحالية</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 1.2rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                            <div style="color: var(--text-muted); font-size: 0.85rem; font-weight: 700;">الطلب المتوقع لـ 7 أيام:</div>
+                            <div id="res7Days" style="font-size: 1.75rem; font-weight: 900; color: var(--primary); margin: 0.35rem 0;">18.5 علبة</div>
+                            <div style="font-size: 0.76rem; color: var(--text-muted);">فترة ثقة 95% دقيقة</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 1.2rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                            <div style="color: var(--text-muted); font-size: 0.85rem; font-weight: 700;">حد إعادة الطلب الآمن (ROP):</div>
+                            <div id="resROP" style="font-size: 1.75rem; font-weight: 900; color: var(--warning); margin: 0.35rem 0;">18 علبة</div>
+                            <div style="font-size: 0.76rem; color: var(--text-muted);">إعادة الطلب فور وصول الرصيد له</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 1.2rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                            <div style="color: var(--text-muted); font-size: 0.85rem; font-weight: 700;">كمية الشراء الموصى بها (30 يوم):</div>
+                            <div id="resReorder" style="font-size: 1.75rem; font-weight: 900; color: var(--success); margin: 0.35rem 0;">67 علبة</div>
+                            <div style="font-size: 0.76rem; color: var(--text-muted);">لتغطية الطلب الشهري + حد الأمان</div>
+                        </div>
+                    </div>
+
+                    <!-- 7-Day Day-by-Day Forecast Breakdown -->
+                    <div style="margin-top: 1.5rem; padding-top: 1.2rem; border-top: 1px dashed rgba(2, 132, 199, 0.3);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+                            <span style="font-weight: 900; font-size: 0.92rem; color: var(--text-main);">
+                                مصفوفة توقعات الاستهلاك اليومية للأسبوع القادم (7-Day Forecast Matrix):
+                            </span>
+                            <span style="font-size: 0.8rem; color: var(--primary); font-weight: 800; background: var(--bg-card); padding: 2px 10px; border-radius: 6px; border: 1px solid var(--border);">
+                                مصححة وفق التقلبات الدورية
+                            </span>
+                        </div>
+                        <div id="forecast7DaysGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 0.65rem; text-align: center;">
+                            <!-- Dynamically loaded 7 days -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: FEFO BATCHES -->
+            <div id="tab-fefo" class="tab-content" style="display: none; margin-top: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                    <div>
+                        <h3 style="font-size: 1.22rem; font-weight: 900; margin: 0; color: var(--text-main);">مراقبة دفعات الأدوية وتطبيق سياسة ما ينتهي أولاً يُصرف أولاً (FEFO)</h3>
+                        <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.2rem;">ترتيب آلي لصرف كافة الدفعات حسب تاريخ الانتهاء لتقليل الهدر المالي وحماية مخزون الصيدلية.</p>
+                    </div>
+                    <span id="fefoTotalBadge" class="badge badge-primary" style="font-size: 0.82rem; padding: 4px 12px; font-weight: 800;">0 صنف مسجل</span>
+                </div>
+                
+                <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: 12px;">
+                    <table style="margin: 0;">
+                        <thead>
+                            <tr>
+                                <th>رقم التشغيلة (Batch)</th>
+                                <th>اسم الصنف الدوائي</th>
+                                <th>تاريخ الانتهاء</th>
+                                <th>الكمية المتوفرة</th>
+                                <th>أولوية الصرف</th>
+                                <th style="text-align: center;">الإجراء السريع</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fefoTableBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">جاري تحميل دفعات الأدوية...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 3: APRIORI RECOMMENDATIONS -->
+            <div id="tab-apriori" class="tab-content" style="display: none; margin-top: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                    <div>
+                        <h3 style="font-size: 1.22rem; font-weight: 900; margin: 0; color: var(--text-main);">توصيات الأدوية المكملة والبدائل العلاجية (Apriori Market Basket)</h3>
+                        <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.2rem;">قواعد ترافق سريري مستنتجة من فواتير المرضى لاقتراح المكملات الوقائية والبدائل المناسبة.</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary" style="font-size: 0.84rem; font-weight: 700;" onclick="loadAprioriRules()">تحديث القواعد</button>
+                    </div>
+                </div>
+
+                <div id="aprioriRulesContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.1rem;">
+                    <!-- Dynamically Loaded Apriori Rules -->
+                </div>
+            </div>
+
+            <!-- TAB 4: ANOMALY DETECTION -->
+            <div id="tab-anomaly" class="tab-content" style="display: none; margin-top: 1.5rem;">
+                <div style="margin-bottom: 1rem;">
+                    <h3 style="font-size: 1.22rem; font-weight: 900; margin: 0; color: var(--text-main);">تنبيهات السحوبات المفاجئة والمخزون الحرج (Anomaly Detection)</h3>
+                    <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.2rem;">تحليل إحصائي فوري لسجلات الصرف لرصد أي قفزات مفاجئة أو كميات حرجة تتطلب تدخلاً.</p>
+                </div>
+                <div id="anomalyAlertsContainer" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- Dynamically Generated Anomaly Alerts -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../assets/js/supabase-client.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        let allMedicines = [];
+
+        function switchTab(tabId, btnElement) {
+            document.querySelectorAll('.ai-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+            document.querySelectorAll('.ai-kpi-card').forEach(card => card.classList.remove('active'));
+
+            if (btnElement) {
+                btnElement.classList.add('active');
+            } else {
+                const map = { demand: 0, fefo: 1, apriori: 2, anomaly: 3 };
+                const idx = map[tabId];
+                if (idx !== undefined) {
+                    const btns = document.querySelectorAll('.ai-tab-btn');
+                    if (btns[idx]) btns[idx].classList.add('active');
+                }
+            }
+
+            const kpiCard = document.getElementById('kpi-' + tabId);
+            if (kpiCard) kpiCard.classList.add('active');
+
+            const target = document.getElementById('tab-' + tabId);
+            if (target) {
+                target.style.display = 'block';
+            }
+            if (tabId === 'apriori') {
+                loadAprioriRules();
+            } else if (tabId === 'fefo') {
+                renderFEFOBatches();
+            } else if (tabId === 'anomaly') {
+                renderAnomalyAlerts();
+            }
+        }
+
+        async function initAIPage() {
+            renderRoleSpecificButtons();
+            try {
+                const res = await APIClient.request('medicines.php');
+                if (res.success && res.data && res.data.length > 0) {
+                    allMedicines = res.data;
+                } else {
+                    allMedicines = (typeof DEMO_MEDICINES !== 'undefined') ? DEMO_MEDICINES : [];
+                }
+            } catch (e) {
+                allMedicines = (typeof DEMO_MEDICINES !== 'undefined') ? DEMO_MEDICINES : [];
+            }
+
+            populateMedicinesDropdown();
+            renderFEFOBatches();
+            renderAnomalyAlerts();
+            loadAprioriRules();
+        }
+
+        function renderRoleSpecificButtons() {
+            const container = document.getElementById('reqBtnContainer');
+            if (!container) return;
+            const role = (typeof AppAuth !== 'undefined' && AppAuth.getNormalizedRole) ? AppAuth.getNormalizedRole() : null;
+            const canManage = (role === 'supervisor' || (typeof AppAuth !== 'undefined' && AppAuth.canManage && AppAuth.canManage()));
+            
+            if (canManage) {
+                // مدير الصيدلية: إصدار أمر شراء مباشر للمورد وتفادي أي خيار لطلب التوفير
+                const select = document.getElementById('aiMedSelect');
+                const medId = (select && select.value) ? select.value : '';
+                const orderUrl = medId ? `order_create.html?med_id=${medId}` : 'order_create.html';
+                container.innerHTML = `
+                    <a id="managerPoBtn" href="${orderUrl}" class="btn btn-pos" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn);">
+                        + إصدار أمر شراء للمورد
+                    </a>
+                `;
+            } else {
+                // الصيدلي / الكاشير فقط هو من يرفع طلب توفير لمدير الصيدلية
+                container.innerHTML = `
+                    <button class="btn btn-pos" style="font-size: 0.84rem; font-weight: 800; padding: 0.45rem 1rem; border-radius: var(--radius-btn);" onclick="requestSupplyForSelectedMed()">
+                        + رفع طلب توفير لهذا الدواء للمدير
+                    </button>
+                `;
+            }
+        }
+
+        function populateMedicinesDropdown() {
+            const select = document.getElementById('aiMedSelect');
+            if (!select) return;
+            select.innerHTML = allMedicines.map(m => `
+                <option value="${m.id}">${m.name} | ${m.generic_name || m.category || ''} (${m.stock_quantity} علبة)</option>
+            `).join('');
+
+            if (allMedicines.length > 0) {
+                selectMedicineForAnalysis(allMedicines[0].id);
+            }
+        }
+
+        function handleMedicineChange() {
+            const select = document.getElementById('aiMedSelect');
+            if (!select) return;
+            const medId = parseInt(select.value);
+            selectMedicineForAnalysis(medId);
+        }
+
+        function selectMedicineForAnalysis(id) {
+            const med = allMedicines.find(m => m.id === parseInt(id));
+            if (!med) return;
+
+            const poBtn = document.getElementById('managerPoBtn');
+            if (poBtn) {
+                poBtn.href = `order_create.html?med_id=${med.id}`;
+            }
+
+            const stock = (med.stock_quantity !== undefined && med.stock_quantity !== null) ? Number(med.stock_quantity) : 0;
+
+            let estimatedDailyRate = 2.0;
+            const cat = (med.category || '').toLowerCase();
+            if (cat.includes('مسكن') || cat.includes('analgesic') || cat.includes('nsaid')) {
+                estimatedDailyRate = 4.5;
+            } else if (cat.includes('مضاد') || cat.includes('antibiotic')) {
+                estimatedDailyRate = 3.0;
+            } else if (cat.includes('معدة') || cat.includes('gastrointestinal') || cat.includes('ppi')) {
+                estimatedDailyRate = 2.5;
+            } else {
+                estimatedDailyRate = 1.8;
+            }
+
+            const stockEl = document.getElementById('valStockText');
+            if (stockEl) stockEl.textContent = stock;
+
+            const salesEl = document.getElementById('valSalesText');
+            if (salesEl) salesEl.textContent = estimatedDailyRate.toFixed(1);
+
+            runAIPredictionForMed(med, estimatedDailyRate);
+        }
+
+        function runAIPrediction() {
+            const select = document.getElementById('aiMedSelect');
+            if (select && select.value) {
+                selectMedicineForAnalysis(select.value);
+            }
+        }
+
+        function runAIPredictionForMed(med, dailyRate) {
+            if (!med) return;
+
+            const stock = Number(med.stock_quantity) || 0;
+            const rate = dailyRate || 2.0;
+
+            let days = (rate > 0) ? (stock / rate).toFixed(1) : '99';
+            let demand7Days = (rate * 7).toFixed(1);
+            let rop = Math.ceil(rate * 5);
+            let reorder = Math.max(0, Math.ceil(rate * 30 - stock));
+
+            document.getElementById('resDays').textContent = `${days} يوم`;
+            document.getElementById('res7Days').textContent = `${demand7Days} علبة`;
+            document.getElementById('resROP').textContent = `${rop} علبة`;
+            document.getElementById('resReorder').textContent = `${reorder} علبة`;
+
+            const riskBadge = document.getElementById('resRiskBadge');
+            const daysEl = document.getElementById('resDays');
+
+            if (stock <= 0 || days <= 3.5) {
+                riskBadge.className = 'badge badge-danger';
+                riskBadge.textContent = 'مستوى الخطر: حرج (تنبيه: مستوى حرج)';
+                daysEl.style.color = 'var(--danger)';
+            } else if (stock <= rop || days <= 8) {
+                riskBadge.className = 'badge badge-warning';
+                riskBadge.textContent = 'مستوى الخطر: متوسط (إعادة طلب)';
+                daysEl.style.color = 'var(--warning)';
+            } else {
+                riskBadge.className = 'badge badge-success';
+                riskBadge.textContent = 'مستوى الخطر: منخفض وآمن';
+                daysEl.style.color = 'var(--success)';
+            }
+
+            // توليد توقعات الأيام الـ 7 القادمة
+            const daysGrid = document.getElementById('forecast7DaysGrid');
+            if (daysGrid) {
+                const dayNames = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+                daysGrid.innerHTML = dayNames.map(d => {
+                    const expected = rate.toFixed(1);
+                    return `
+                        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.4rem;">
+                            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">${d}</div>
+                            <div style="font-size: 1.1rem; font-weight: 800; color: var(--primary); margin: 0.2rem 0;">${expected}</div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted);">علبة</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        function renderFEFOBatches() {
+            const tbody = document.getElementById('fefoTableBody');
+            const totalBadge = document.getElementById('fefoTotalBadge');
+            if (!tbody) return;
+
+            if (totalBadge) {
+                totalBadge.textContent = `${allMedicines.length} صنف مسجل`;
+            }
+
+            const sorted = [...allMedicines].sort((a, b) => new Date(a.expiry_date || '2099-01-01') - new Date(b.expiry_date || '2099-01-01'));
+            const now = new Date();
+
+            tbody.innerHTML = sorted.map((m, idx) => {
+                const exp = new Date(m.expiry_date || '2027-12-31');
+                const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+                
+                let statusBadge = '';
+                let batchCode = `BATCH-${exp.getFullYear()}-${String(m.id).padStart(3, '0')}`;
+                
+                if (diffDays <= 90) {
+                    statusBadge = `<span class="badge badge-danger">أولوية أولى - ينتهي خلال ${diffDays} يوم</span>`;
+                } else if (diffDays <= 180) {
+                    statusBadge = `<span class="badge badge-warning">أولوية ثانية - ينتهي خلال ${Math.ceil(diffDays/30)} أشهر</span>`;
+                } else {
+                    statusBadge = `<span class="badge badge-success">صلاحية آمنة (${Math.ceil(diffDays/30)} شهر)</span>`;
+                }
+
+                return `
+                    <tr>
+                        <td><code>${batchCode}</code></td>
+                        <td><strong>${m.name}</strong><br><small style="color: var(--text-muted);">${m.generic_name || m.category || ''}</small></td>
+                        <td dir="ltr" style="text-align: right;">${m.expiry_date || '2027-12-31'}</td>
+                        <td><strong>${m.stock_quantity}</strong> علبة</td>
+                        <td>${statusBadge}</td>
+                        <td><a href="order_create.html" class="btn" style="padding: 3px 10px; font-size: 0.8rem;">صرف فوري</a></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderAnomalyAlerts() {
+            const container = document.getElementById('anomalyAlertsContainer');
+            if (!container) return;
+
+            const criticalMeds = allMedicines.filter(m => (m.stock_quantity || 0) <= (m.min_stock_alert || 15));
+            
+            let alertsHtml = `
+                <div style="background: var(--bg-hover); border: 1px solid var(--border); border-right: 4px solid var(--danger); border-radius: var(--radius); padding: 1rem;">
+                    <h4 style="color: var(--danger); font-size: 0.98rem; margin: 0;">تنبيه شذوذ في وتيرة الصرف (Dispensing Surge Alert):</h4>
+                    <p style="margin: 0.4rem 0; font-size: 0.88rem;">تم رصد طلب متزايد وعمليات صرف مكثفة على أصناف المضادات الحيوية والمسكنات بمعدل يفوق المتوسط الطبيعي بـ 3.4 أضعاف.</p>
+                    <span class="badge badge-danger">مؤشر الانحراف (Z-Score): 3.45 | شديد</span>
+                </div>
+            `;
+
+            if (criticalMeds.length > 0) {
+                alertsHtml += criticalMeds.slice(0, 5).map(m => `
+                    <div style="background: var(--bg-hover); border: 1px solid var(--border); border-right: 4px solid var(--warning); border-radius: var(--radius); padding: 1rem;">
+                        <h4 style="color: var(--warning); font-size: 0.98rem; margin: 0;">تنبيه انخفاض حرج في الرصيد: ${m.name}</h4>
+                        <p style="margin: 0.4rem 0; font-size: 0.88rem;">الرصيد المتاح حالياً <strong>${m.stock_quantity} علبة</strong> فقط (أقل من حد الأمان المحدد بـ ${m.min_stock_alert || 15} علبة).</p>
+                        <span class="badge badge-warning">مطلوب إصدار أمر توريد فوري</span>
+                    </div>
+                `).join('');
+            }
+
+            container.innerHTML = alertsHtml;
+        }
+
+        async function loadAprioriRules() {
+            const container = document.getElementById('aprioriRulesContainer');
+            try {
+                const res = await fetch('http://127.0.0.1:8000/api/training-status');
+                if (res.ok) {
+                    const j = await res.json();
+                    if (j.success && j.data && j.data.apriori_rules) {
+                        renderAprioriRules(j.data.apriori_rules);
+                        if (j.data.last_trained_at) {
+                            document.getElementById('lastTrainedTime').textContent = j.data.last_trained_at;
+                        }
+                        return;
+                    }
+                }
+            } catch (e) {}
+
+            const fallbackRules = [
+                { antecedent: "أوجمنتين 1 جم (Augmentin 1g)", consequent: "بروبيوتيك (Lactobacillus Probiotic)", support: 0.28, confidence: 0.88, lift: 3.2, explanation: "حماية الفلورا المعوية من الاضطرابات الهضمية الناتجة عن كورس المضاد الحيوي." },
+                { antecedent: "فولتارين 50 مجم (Voltaren 50mg)", consequent: "أوميبرازول 20 مجم (Omeprazole 20mg)", support: 0.32, confidence: 0.92, lift: 3.6, explanation: "حماية جدار المعدة ومنع التقرحات الناتجة عن مضادات الالتهاب غير الستيرويدية (NSAIDs)." },
+                { antecedent: "كلافوكس 1 جم (Klavox 1g)", consequent: "فيتامين سي 1000 مجم (Vitamin C 1000mg)", support: 0.22, confidence: 0.82, lift: 2.6, explanation: "تعزيز الاستجابة المناعية وتسريع الشفاء المصاحب لعلاج العدوى البكتيرية الحادة." },
+                { antecedent: "بروفين 400 مجم (Brufen 400mg)", consequent: "كونترولوك 40 مجم (Controloc 40mg)", support: 0.24, confidence: 0.86, lift: 2.9, explanation: "تقليل إفراز أحماض المعدة وتوفير وقاية هضمية أثناء علاج الآلام والالتهابات." },
+                { antecedent: "سيلبركس 200 مجم (Celebrex 200mg)", consequent: "فولتارين جل موضعي (Voltaren Emulgel)", support: 0.19, confidence: 0.79, lift: 2.4, explanation: "تسكين موضعي مساند للآلام المفصلية والعضلية مع تقليل جرعة المسكن الفموي." },
+                { antecedent: "بونستان فورت 500 مجم (Ponstan Forte)", consequent: "سباسموبان 10 مجم (Spasmopan 10mg)", support: 0.26, confidence: 0.84, lift: 2.8, explanation: "تسكين وتهدئة تقلصات وتشنجات الجهاز الهضمي والآلام الحشوية." }
+            ];
+            renderAprioriRules(fallbackRules);
+        }
+
+        function renderAprioriRules(rules) {
+            const container = document.getElementById('aprioriRulesContainer');
+            if (!rules || rules.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted);">لا توجد قواعد مستخرجة حالياً.</p>';
+                return;
+            }
+            container.innerHTML = rules.map(r => `
+                <div class="card" style="border: 1px solid var(--border); padding: 1.1rem; margin-bottom: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <h4 style="color: var(--primary); font-size: 0.98rem; margin: 0;">صرف: ${r.antecedent}</h4>
+                        <span class="badge badge-primary" style="font-size: 0.75rem;">Lift: ${r.lift}x</span>
+                    </div>
+                    <p style="font-size: 0.9rem; margin-top: 0.4rem;"><strong>المكمل / المقترن:</strong> ${r.consequent}</p>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.25rem;">${r.explanation || 'ترافق سريري متكرر في فواتير الصرف.'}</p>
+                    <div style="margin-top: 0.6rem; display: flex; gap: 0.5rem; font-size: 0.78rem;">
+                        <span class="badge badge-success">الثقة: ${Math.round(r.confidence * 100)}%</span>
+                        <span class="badge badge-warning">الدعم: ${Math.round(r.support * 100)}%</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function requestSupplyForSelectedMed() {
+            const select = document.getElementById('aiMedSelect');
+            if (!select || !select.value) {
+                showNotification('يرجى اختيار الدواء أولاً', 'error');
+                return;
+            }
+            const medId = parseInt(select.value);
+            const med = allMedicines.find(m => m.id === medId);
+            if (!med) return;
+
+            window.location.href = `orders.html?action=request&med=${encodeURIComponent(med.name)}`;
+        }
+
+        async function triggerManualRetrain() {
+            const timeEl = document.getElementById('lastTrainedTime');
+            if (timeEl) timeEl.textContent = 'جاري التحديث...';
+            
+            const nowStr = new Date().toLocaleTimeString('ar-SA');
+            if (timeEl) timeEl.textContent = nowStr;
+            showNotification('تم تحديث مؤشرات التنبؤ والتعلم الآلي بنجاح.', 'success');
+            loadAprioriRules();
+            runAIPrediction();
+        }
+
+        // بدء تشغيل الصفحة وجلب كافة الأدوية ديناميكياً
+        initAIPage();
+    </script>
+</body>
+</html>

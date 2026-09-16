@@ -1,0 +1,28 @@
+<?php
+namespace Models;
+
+use Core\Database;
+use PDO;
+
+class Order {
+ public static function getAll(): array {
+ $db = Database::getInstance()->getConnection();
+ $stmt = $db->query("SELECT o.*, u.username FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.order_date DESC");
+ return $stmt->fetchAll();
+ }
+
+ public static function getById(int $id): ?array {
+ $db = Database::getInstance()->getConnection();
+ $stmt = $db->prepare("SELECT o.*, u.username FROM orders o JOIN users u ON o.user_id = u.id WHERE o.id = :id");
+ $stmt->execute([':id' => $id]);
+ $order = $stmt->fetch();
+
+ if (!$order) return null;
+
+ $itemStmt = $db->prepare("SELECT oi.*, m.name as medicine_name FROM order_items oi JOIN medicines m ON oi.medicine_id = m.id WHERE oi.order_id = :order_id");
+ $itemStmt->execute([':order_id' => $id]);
+ $order['items'] = $itemStmt->fetchAll();
+
+ return $order;
+ }
+}

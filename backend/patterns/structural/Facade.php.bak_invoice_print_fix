@@ -1,0 +1,81 @@
+<?php
+namespace Patterns\Structural;
+
+use Core\Database;
+use PDO;
+use Exception;
+
+class Facade {
+ private PDO $db;
+
+ public function __construct() {
+ $this->db = Database::getInstance()->getConnection();
+ }
+
+ /**
+ * Process order placement safely using database transaction
+ */
+ public function placeOrder(int $userId, array $items): array {
+ $this->db->beginTransaction();
+ try {
+ $totalAmount = 0.0;
+
+ // 1. Verify stock and calculate total
+ foreach ($items as $item) {
+ $stmt = $this->db->prepare("SELECT price, stock_quantity FROM medicines WHERE id = :id FOR UPDATE");
+ $stmt->execute([':id' => $item['medicine_id']]);
+ $med = $stmt->fetch();
+
+ if (!$med) {
+ throw new Exception("Medicine ID {$item['medicine_id']} not found.");
+ }
+
+ if ($med['stock_quantity'] < $item['quantity']) {
+ throw new Exception("Insufficient stock for medicine ID {$item['medicine_id']}.");
+ }
+
+ $totalAmount += floatval($med['price']) * intval($item['quantity']);
+ }
+
+ // 2. Insert Order
+ $orderStmt = $this->db->prepare("INSERT INTO orders (user_id, total_amount, status, payment_status) VALUES (:user_id, :total, 'completed', 'paid')");
+ $orderStmt->execute([
+ ':user_id' => $userId,
+ ':total' => $totalAmount
+ ]);
+ $orderId = $this->db->lastInsertId();
+
+ // 3. Insert Items and update stock
+ $itemStmt = $this->db->prepare("INSERT INTO order_items (order_id, medicine_id, quantity, unit_price) VALUES (:order_id, :med_id, :qty, :price)");
+ $updateStockStmt = $this->db->prepare("UPDATE medicines SET stock_quantity = stock_quantity - :qty WHERE id = :med_id");
+
+ foreach ($items as $item) {
+ $stmt = $this->db->prepare("SELECT price FROM medicines WHERE id = :id");
+ $stmt->execute([':id' => $item['medicine_id']]);
+ $med = $stmt->fetch();
+
+ $itemStmt->execute([
+ ':order_id' => $orderId,
+ ':med_id' => $item['medicine_id'],
+ ':qty' => $item['quantity'],
+ ':price' => $med['price']
+ ]);
+
+ $updateStockStmt->execute([
+ ':qty' => $item['quantity'],
+ ':med_id' => $item['medicine_id']
+ ]);
+ }
+
+ $this->db->commit();
+ return [
+ 'order_id' => $orderId,
+ 'total_amount' => $totalAmount,
+ 'status' => 'completed'
+ ];
+ } catch (Exception $e) {
+ $this->db->rollBack();
+ throw $e;
+ }
+ }
+}

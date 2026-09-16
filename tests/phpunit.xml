@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="bootstrap.php" colors="true" cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="SPMS Unit">
+            <directory suffix="Test.php">Unit</directory>
+        </testsuite>
+        <testsuite name="SPMS Integration">
+            <directory suffix="Test.php">Integration</directory>
+        </testsuite>
+        <testsuite name="SPMS API Contracts">
+            <directory suffix="Test.php">API</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
