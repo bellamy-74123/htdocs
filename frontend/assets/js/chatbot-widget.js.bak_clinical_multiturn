@@ -128,21 +128,39 @@
         try {
             const currentMeds = await fetchWidgetDatabase();
             let resData = null;
-            // 1. الاتصال المباشر بمحرك PHP المتصل بقاعدة بيانات MySQL الحية
+
+            // 1. الاتصال المباشر بمحرك بايثون FastAPI
+            if (!resData) {
+                try {
+                    const pyRes = await fetch('http://127.0.0.1:8000/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: text, medicines: currentMeds, history: widgetHistory })
+                    });
+                    if (pyRes.ok) {
+                        const pyJ = await pyRes.json();
+                        if (pyJ.success && pyJ.data) {
+                            resData = pyJ.data;
+                        }
+                    }
+                } catch (pyErr) {
+                    console.warn('FastAPI direct call failed, trying PHP backend...');
+                }
+            }
+
+            // 2. الاتصال عبر وسيط PHP إذا لزم الأمر
             if (!resData) {
                 const candidatePaths = [
-                    (window.location.origin ? window.location.origin : '') + '/backend/api/chatbot.php',
-                    isSubpage ? '../backend/api/chatbot.php' : 'backend/api/chatbot.php',
+                    'http://localhost:8080/api/chatbot.php',
                     isSubpage ? '../../backend/api/chatbot.php' : '../backend/api/chatbot.php',
-                    'http://localhost/backend/api/chatbot.php',
-                    'http://127.0.0.1/backend/api/chatbot.php'
+                    isSubpage ? '../backend/api/chatbot.php' : 'backend/api/chatbot.php'
                 ];
                 for (const apiPath of candidatePaths) {
                     try {
                         const res = await fetch(apiPath, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ message: text, history: widgetHistory })
+                            body: JSON.stringify({ message: text, medicines: currentMeds, history: widgetHistory })
                         });
                         if (res.ok) {
                             const j = await res.json();
@@ -155,25 +173,16 @@
                 }
             }
 
-            // 2. محرك الاستجابة الاحتياطي القائم على بيانات الأدوية المسترجعة من قاعدة البيانات
+            // 3. محرك الاستجابة المباشر على بيانات قاعدة البيانات الحية
             if (!resData) {
-                resData = queryWidgetDatabase(text, currentMeds, widgetHistory);
+                resData = queryWidgetDatabase(text, currentMeds);
             }
 
             const loader = document.getElementById(loadingId);
             if (loader) loader.remove();
 
             if (resData && resData.reply) {
-                let widgetHtml = formatText(resData.reply);
-                if (resData.medicines && resData.medicines.length > 0) {
-                    widgetHtml += `<div style="margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 6px;">`;
-                    widgetHtml += `<div style="font-size: 0.76rem; font-weight: 700; color: var(--primary, #0284c7); margin-bottom: 4px;">إصدار فاتورة صرف الدواء:</div>`;
-                    resData.medicines.slice(0, 2).forEach((m, idx) => {
-                        widgetHtml += renderWidgetMedCard(m, idx === 0);
-                    });
-                    widgetHtml += `</div>`;
-                }
-                appendWidgetMsg('bot', widgetHtml);
+                appendWidgetMsg('bot', formatText(resData.reply));
                 widgetHistory.push({ role: 'assistant', content: resData.reply });
             } else {
                 appendWidgetMsg('bot', 'تمت المعالجة بنجاح.');
@@ -181,12 +190,13 @@
         } catch (err) {
             const loader = document.getElementById(loadingId);
             if (loader) loader.remove();
-            appendWidgetMsg('bot', 'تعذر الاتصال بقاعدة البيانات حالياً يا غالي.');
+            appendWidgetMsg('bot', 'تعذر الاتصال بقاعدة البيانات أو محرك الذكاء الاصطناعي حالياً.');
         }
 
         chatBody.scrollTop = chatBody.scrollHeight;
     });
 
+    
     window.addMedToCartFromBot = function(medId, medName) {
         if (typeof addItemToInvoice === 'function' && typeof availableMeds !== 'undefined') {
             const sel = document.getElementById('medSelect');
@@ -233,56 +243,77 @@
         `;
     }
 
-    function queryWidgetDatabase(query, medicines, history = []) {
+    function queryWidgetDatabase(query, medicines) {
         const q = (query || '').toLowerCase().trim();
         const meds = (medicines && medicines.length > 0) ? medicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
 
-        if (q.includes('مرحبا') || q.includes('اهلا') || q.includes('السلام') || q.includes('هلا') || q.includes('صباح') || q.includes('مساء')) {
-            return { reply: "يا هلا وسهلا فيك يا غالي! أنا بيلا مساعدتك الصيدلانية، متصلة مباشرة بقاعدة بيانات الصيدلية للبحث في كافة الأدوية والمخزون الحي بناءً على وصف وأعراض كل دواء." };
+        if (q.includes('مرحبا') || q.includes('اهلا') || q.includes('السلام') || q.includes('هلا')) {
+            return { reply: "أهلاً بك. المساعد متصل مباشرة بقاعدة بيانات الصيدلية للبحث عن الأسعار، توفر المخزون، والبدائل المتكافئة." };
         }
 
-        // البحث الدلالي في بيانات الأدوية الحية بقاعدة البيانات (Description / Category / Name / Generic)
-        const stopWords = ['عندي', 'ابغي', 'ابغى', 'اريد', 'محتاج', 'احتاج', 'في', 'من', 'دواء', 'علاج', 'حبوب', 'مرهم', 'شراب'];
-        const qTokens = q.split(/\s+/).filter(w => w.length >= 3 && !stopWords.includes(w));
+        let found = meds.find(m => {
+            const n = (m.name || '').toLowerCase();
+            const g = (m.generic_name || '').toLowerCase();
+            return n.includes(q) || g.includes(q);
+        });
 
-        const scored = [];
-        for (const m of meds) {
-            const desc = (m.description || '').toLowerCase();
-            const cat = (m.category || '').toLowerCase();
-            const name = (m.name || '').toLowerCase();
-            const gen = (m.generic_name || '').toLowerCase();
-
-            let score = 0;
-            if (desc.includes(q)) score += 25;
-            if (cat.includes(q)) score += 20;
-            if (name.includes(q)) score += 30;
-
-            for (const t of qTokens) {
-                if (desc.includes(t)) score += 7;
-                if (cat.includes(t)) score += 6;
-                if (name.includes(t)) score += 12;
-                if (gen.includes(t)) score += 10;
-            }
-
-            if (score >= 6) {
-                scored.push({ med: m, score: score });
+        if (!found) {
+            const words = q.split(' ').filter(w => w.length >= 3);
+            for (const w of words) {
+                found = meds.find(m => {
+                    const n = (m.name || '').toLowerCase();
+                    const g = (m.generic_name || '').toLowerCase();
+                    return n.includes(w) || g.includes(w);
+                });
+                if (found) break;
             }
         }
 
-        scored.sort((a, b) => b.score - a.score);
+        if (found) {
+            const alts = meds.filter(m => m.id !== found.id && m.generic_name && found.generic_name && m.generic_name.toLowerCase() === found.generic_name.toLowerCase()).sort((a, b) => a.price - b.price);
+            let reply = `### نتيجة البحث: **${found.name}**\n`;
+            reply += renderWidgetMedCard(found);
 
-        if (scored.length > 0) {
-            const topMeds = scored.slice(0, 3).map(s => s.med);
-            let reply = `سلامتك وألف لا بأس عليك يا غالي! بناءً على وصف الأدوية المسجلة بقاعدة بيانات الصيدلية، هذي أفضل الخيارات المناسبة لحالتك:\n\n`;
-            topMeds.forEach((m, idx) => {
-                const stock = m.stock_quantity > 0 ? `متوفر بالمخزن (${m.stock_quantity} علبة)` : 'غير متوفر حالياً';
-                reply += `${idx + 1}. **${m.name}**\n   - دواعي الاستعمال من وصف الصنف: ${m.description || m.category}\n   - السعر: **${parseFloat(m.price || 0).toFixed(2)} ريال** | ${stock}\n\n`;
-            });
-            reply += `---\n**بيلا معك:** تحب أضيف لك الدواء لسلة الفاتورة مباشرة يا غالي؟ أو عندك استفسار عن الجرعة أو ملاءمته لأي أمراض ثانية؟`;
+            if (alts.length > 0) {
+                reply += `\n#### البدائل المتكافئة المسجلة بالصيدلية (مرتبة حسب السعر):\n`;
+                alts.forEach((alt, idx) => {
+                    reply += renderWidgetMedCard(alt, idx === 0 && alt.price < found.price);
+                });
+            }
             return { reply: reply };
         }
 
-        return { reply: "سلامتك يا غالي، ما لقيت دواء مسجل بالمخزن يطابق هذا الوصف بالتحديد. تقدر تكتب لي اسم الدواء التجاري أو توضح الأعراض أكثر وسأطلع لك المتوفر فوراً." };
+        // فحص الأعراض السريرية الشائعة
+        const symptomRules = [
+            { keywords: ['صداع', 'راس', 'رأس', 'شقيقة', 'شقيقه', 'مصدع'], title: 'الصداع والصداع النصفي', generics: ['باراسيتامول', 'إيبوبروفين', 'ديكلوفيناك'], advice: 'تناول قرص باراسيتامول أو بنادول إكسترا بعد الأكل مع شرب الماء.' },
+            { keywords: ['حرارة', 'حراره', 'سخونة', 'سخونه', 'حمى', 'حمي', 'مكسر'], title: 'الحمى وارتفاع الحرارة', generics: ['باراسيتامول', 'إيبوبروفين'], advice: 'تناول الباراسيتامول كل 6-8 ساعات مع كمادات ماء فاتر وسوائل بكثرة.' },
+            { keywords: ['حموضة', 'حموضه', 'حرقان', 'ارتجاع', 'قرحة', 'معدة'], title: 'حموضة وحرقة المعدة', generics: ['أوميبرازول', 'بانتوبرازول'], advice: 'تناول كبسولة أوميبرازول 20 مجم صباحاً قبل الإفطار بنصف ساعة.' },
+            { keywords: ['كحة', 'كحه', 'سعال', 'بلغم', 'رشح', 'زكام', 'حلق'], title: 'السعال والرشح والتهاب الحلق', generics: ['باراسيتامول', 'أزيثرومايسين', 'أموكسيسيلين', 'سيتريزين'], advice: 'تناول الباراسيتامول لتسكين الحلق والحرارة ومضادات الهيستامين للرشح.' },
+            { keywords: ['مفاصل', 'ركبة', 'ركبه', 'روماتيزم', 'عظام', 'ظهر', 'خشونة'], title: 'آلام المفاصل والفقرات', generics: ['سيليكوكسيب', 'ديكلوفيناك', 'ميلوكسيكام', 'إيبوبروفين'], advice: 'استخدام مضاد التهاب مثل سيلبركس أو فولتارين بعد الوجبات مباشرة.' },
+            { keywords: ['اسنان', 'أسنان', 'ضرس', 'لثة', 'خراج'], title: 'ألم الأسنان والتهاب اللثة', generics: ['ديكلوفيناك', 'إيبوبروفين', 'أموكسيسيلين + كلافولانات'], advice: 'تناول مسكن سريع مثل كتافلام أو بروفين بعد الأكل مع زيارة طبيب الأسنان.' }
+        ];
+
+        for (const rule of symptomRules) {
+            if (rule.keywords.some(k => q.includes(k))) {
+                const matched = meds.filter(m => {
+                    const gen = (m.generic_name || '').toLowerCase();
+                    const nm = (m.name || '').toLowerCase();
+                    return rule.generics.some(g => gen.includes(g) || nm.includes(g));
+                }).sort((a, b) => (b.stock_quantity > 0 ? 0 : 1) - (a.stock_quantity > 0 ? 0 : 1) || (a.price - b.price));
+
+                if (matched.length > 0) {
+                    let reply = `### التقييم السريري: **${rule.title}**\n\n`;
+                    reply += `#### الأدوية الموصى بها المتوفرة بالمخزن:\n`;
+                    matched.slice(0, 4).forEach((m, idx) => {
+                        reply += renderWidgetMedCard(m, idx === 0);
+                    });
+                    reply += `\n#### إرشادات الاستخدام والجرعات الآمنة:\n${rule.advice}\n`;
+                    return { reply: reply };
+                }
+            }
+        }
+
+        return { reply: "لم أتمكن من العثور على الدواء المطلوب في قاعدة البيانات. يمكنك سؤالي عن أعراض المريض (مثل: 'دواء للصداع'، 'علاج لحموضة المعدة') أو كتابة اسم الدواء بوضوح." };
     }
 
     function appendWidgetMsg(sender, htmlContent) {

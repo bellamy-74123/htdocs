@@ -366,15 +366,31 @@
                     const currentMeds = await refreshDatabase();
                     let responseData = null;
 
-                    // 1. الاتصال المباشر بمحرك PHP المتصل بقاعدة بيانات MySQL الحية
+                    // 1. الاتصال بخادم محرك الذكاء الاصطناعي (FastAPI / NLP)
+                    if (!responseData) {
+                        try {
+                            const pyRes = await fetch('http://127.0.0.1:8000/api/chat', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ message: text, medicines: currentMeds, history: chatHistory })
+                            });
+                            if (pyRes.ok) {
+                                const pyJson = await pyRes.json();
+                                if (pyJson.success && pyJson.data) {
+                                    responseData = pyJson.data;
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('FastAPI direct connection failed, trying PHP backend proxy...');
+                        }
+                    }
+
+                    // 3. الأولوية الثالثة: وسيط PHP المرتبط بـ MySQL
                     if (!responseData) {
                         const candidatePhp = [
-                            (window.location.origin ? window.location.origin : '') + '/backend/api/chatbot.php',
-                            '../backend/api/chatbot.php',
+                            'http://localhost:8080/api/chatbot.php',
                             '../../backend/api/chatbot.php',
-                            'backend/api/chatbot.php',
-                            'http://localhost/backend/api/chatbot.php',
-                            'http://127.0.0.1/backend/api/chatbot.php'
+                            '../backend/api/chatbot.php'
                         ];
                         for (const phpUrl of candidatePhp) {
                             try {
@@ -394,42 +410,20 @@
                         }
                     }
 
-                    // 2. محرك الاستعلام السريري والبحث الدلالي الاحتياطي في المتصفح
+                    // 4. الأولوية الرابعة: محرك الاستعلام السريري المحلي المتكامل في المتصفح
                     if (!responseData) {
-                        responseData = queryLiveDatabase(text, currentMeds, chatHistory);
+                        responseData = queryLiveDatabase(text, currentMeds);
                     }
 
                     typingIndicator.style.display = 'none';
 
                     if (responseData && responseData.reply) {
-                        let htmlContent = formatMarkdownReply(responseData.reply);
-
-                        // إدراج بطاقات الصرف المباشر للفاتورة للأدوية
-                        if (responseData.medicines && responseData.medicines.length > 0) {
-                            htmlContent += `<div style="margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px;">`;
-                            htmlContent += `<div style="font-size: 0.84rem; font-weight: 800; color: var(--primary); margin-bottom: 8px;">إصدار فاتورة صرف الدواء مباشرة:</div>`;
-                            responseData.medicines.slice(0, 3).forEach((m, idx) => {
-                                if (m) htmlContent += renderChatMedActionCard(m, idx === 0);
-                            });
-                            htmlContent += `</div>`;
-                        }
-
-                        if (responseData.alternatives && responseData.alternatives.length > 0) {
-                            htmlContent += `<div style="margin-top: 10px;">`;
-                            htmlContent += `<div style="font-size: 0.82rem; font-weight: 800; color: var(--success); margin-bottom: 6px;">البدائل الأوفر للصرف في الفاتورة:</div>`;
-                            responseData.alternatives.slice(0, 2).forEach(alt => {
-                                if (alt) htmlContent += renderChatMedActionCard(alt, true);
-                            });
-                            htmlContent += `</div>`;
-                        }
-
-                        appendMessage('bot', htmlContent);
+                        appendMessage('bot', formatMarkdownReply(responseData.reply));
                         chatHistory.push({ role: 'assistant', content: responseData.reply });
                     } else {
                         appendMessage('bot', 'تمت معالجة استفسارك بنجاح.');
                     }
                 } catch (error) {
-                    console.error('Chat processing error:', error);
                     typingIndicator.style.display = 'none';
                     appendMessage('bot', 'تعذر معالجة الطلب حالياً.');
                 }
@@ -466,166 +460,225 @@
                 const cheapestBadge = isCheapest ? '<span class="badge badge-success" style="font-size:0.75rem; padding: 3px 8px; margin-inline-start: 6px;">الخيار الأوفر</span>' : '';
 
                 return `
-                    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin: 10px 0; box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <div style="flex: 1; min-width: 220px;">
-                            <strong style="color: var(--primary); font-size: 0.92rem;">${m.name}</strong> ${cheapestBadge}
-                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
-                                المادة الفعالة: <span class="generic-name" style="font-family: 'Times New Roman', Times, 'Simplified Arabic', serif; font-size: 0.88rem; color: var(--text-muted); font-style: italic;">${m.generic_name || '-'}</span> | السعر: <strong>${parseFloat(m.price || 0).toFixed(2)} ريال</strong> | الرصيد: <strong>${stock} علبة</strong>
+                    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 8px 0; box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <strong style="color: var(--primary); font-size: 0.88rem;">${m.name}</strong> ${cheapestBadge}
+                            <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 3px;">
+                                المادة الفعالة: <span class="generic-name" style="font-family: 'Times New Roman', Times, 'Simplified Arabic', serif; font-size: 0.86rem; color: var(--text-muted); font-style: italic;">${m.generic_name || '-'}</span> | السعر: <strong>${parseFloat(m.price || 0).toFixed(2)} ريال</strong> | الرصيد: <strong>${stock} علبة</strong>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <a href="${posUrl}" class="btn" style="background: var(--primary); color: #fff; font-size: 0.82rem; font-weight: 800; padding: 6px 14px; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(2,132,199,0.25);">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                                <span>+ صرف في الفاتورة</span>
+                        <div style="display: flex; gap: 6px;">
+                            <a href="${posUrl}" class="btn btn-pos" style="font-size: 0.76rem; font-weight: 800; padding: 4px 10px; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                + صرف في الفاتورة
                             </a>
                             ${(typeof AppAuth !== 'undefined' && AppAuth.getNormalizedRole && AppAuth.getNormalizedRole() === 'supervisor')
-                                ? `<a href="order_create.html?med_id=${m.id}" class="btn btn-secondary" style="font-size: 0.78rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; text-decoration: none;">+ أمر شراء</a>`
-                                : `<a href="${reqUrl}" class="btn btn-secondary" style="font-size: 0.78rem; font-weight: 700; padding: 6px 10px; border-radius: 8px; text-decoration: none;">طلب توفير</a>`
+                                ? `<a href="order_create.html?med_id=${m.id}" class="btn btn-secondary" style="font-size: 0.74rem; font-weight: 700; padding: 4px 8px; border-radius: 8px; text-decoration: none;">+ أمر شراء للمورد</a>`
+                                : `<a href="${reqUrl}" class="btn btn-secondary" style="font-size: 0.74rem; font-weight: 700; padding: 4px 8px; border-radius: 8px; text-decoration: none;">طلب توفير للمدير</a>`
                             }
                         </div>
                     </div>
                 `;
             }
 
-            function queryLiveDatabase(query, medicines, history = []) {
-        const q = (query || '').toLowerCase().trim();
-        const meds = (medicines && medicines.length > 0) ? medicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
+            function queryLiveDatabase(query, medicines) {
+                const q = (query || '').toLowerCase().trim();
+                const meds = (medicines && medicines.length > 0) ? medicines : (typeof DEMO_MEDICINES !== 'undefined' ? DEMO_MEDICINES : []);
 
-        if (q.includes('مرحبا') || q.includes('اهلا') || q.includes('السلام') || q.includes('هلا') || q.includes('صباح') || q.includes('مساء')) {
-            return { reply: "أهلاً بك. أنا المساعد الدوائي والسريري الذكي، متصل مباشرة بقاعدة بيانات ومخزون الصيدلية للبحث عن الأسعار، توفر المخزون، تشخيص أكثر من 30 حالة سريرية واقتراح البدائل والجرعات الآمنة." };
-        }
-
-        // 1. فحص الذاكرة السياقية وأسئلة المتابعة
-        const isFollowDosage = q.includes('كم حبة') || q.includes('كم حبه') || q.includes('كم الجرعة') || q.includes('كم الجرعه') || q.includes('طريقة الاستخدام') || q.includes('متى اخذه') || q.includes('متى آخذه') || q.includes('كم مرة') || q.includes('قبل الاكل') || q.includes('بعد الاكل');
-        const isFollowPregnancy = q.includes('حامل') || q.includes('للحامل') || q.includes('مرضع') || q.includes('الرضاعة') || q.includes('ينفع للحامل') || q.includes('آمن للحامل');
-        const isFollowChronic = q.includes('مريض ضغط') || q.includes('عندي ضغط') || q.includes('مريض سكر') || q.includes('عندي سكر') || q.includes('قرحة') || q.includes('معدتي حساسة');
-        const isFollowCheaper = q.includes('في ارخص') || q.includes('في أرخص') || q.includes('بديل ارخص') || q.includes('بديل أرخص') || q.includes('اوفر') || q.includes('أوفر');
-
-        if ((isFollowDosage || isFollowPregnancy || isFollowChronic || isFollowCheaper) && history && history.length > 0) {
-            let lastContext = '';
-            for (let i = history.length - 1; i >= 0; i--) {
-                if (history[i].content) {
-                    lastContext = history[i].content + ' ' + lastContext;
-                    if (lastContext.length > 500) break;
+                if (q.includes('مرحبا') || q.includes('اهلا') || q.includes('السلام') || q.includes('هلا') || q.includes('صباح') || q.includes('مساء')) {
+                    return {
+                        reply: "أهلاً بك. **المساعد الدوائي الذكي** متصل بقاعدة بيانات الصيدلية للإجابة عن أسعار الأدوية، توفر المخزون، والبدائل، واقتراح الأدوية المناسبة لحالات وأعراض المرضى (مثل: الصداع، الحمى، حموضة المعدة، الكحة، آلام المفاصل والأسنان)."
+                    };
                 }
-            }
-            const normC = lastContext.toLowerCase();
 
-            if (isFollowDosage) {
-                if (normC.includes('باراسيتامول') || normC.includes('بنادول') || normC.includes('فيفادول')) {
-                    return { reply: "### إرشادات الجرعة لدواء الباراسيتامول (بنادول / فيفادول):\n- **للبالغين:** 1-2 قرص (500-1000 مجم) كل 6-8 ساعات عند اللزوم.\n- **الحد الأقصى:** 4000 مجم (8 أقراص 500 مجم) خلال 24 ساعة.\n- **التوقيت:** يُفضل بعد الأكل مع ماء وافر، وهو لطيف على المعدة.\n\nهل المريض يعاني من أي مشاكل بوظائف الكبد أو الكلى؟" };
-                }
-                if (normC.includes('ايبوبروفين') || normC.includes('بروفين')) {
-                    return { reply: "### إرشادات الجرعة لدواء الإيبوبروفين (بروفين):\n- **للبالغين:** قرص 400 مجم كل 8 ساعات بعد الوجبة مباشرة.\n- **تحذير:** تجنب أخذه على معدة فارغة لمنع القرحة، ويُمنع لمرضى الضغط غير المنضبط.\n\nهل تود بديلاً أكثر أماناً للمعدة؟" };
-                }
-                if (normC.includes('قولون') || normC.includes('ميبفرين') || normC.includes('دوسباتالين')) {
-                    return { reply: "### إرشادات جرعة أدوية القولون والمغص:\n- **دوسباتالين 135 مجم:** قرص واحد 3 مرات يومياً قبل الوجبة بـ 20 دقيقة.\n- **سباسموبان (هيوسين):** قرص عند اللزوم عند حدوث مغص حاد.\n\nهل المغص مصحوب بإسهال أم بإمساك؟" };
-                }
-                if (normC.includes('اوميبرازول') || normC.includes('حموضة') || normC.includes('نيكسيوم')) {
-                    return { reply: "### إرشادات جرعة علاج الحموضة (أوميبرازول / نيكسيوم):\n- كبسولة واحدة عيار 20 أو 40 مجم صباحاً على الريق قبل الإفطار بـ 30 دقيقة.\n\nهل تشعر بحرقة تصعد للمريء أثناء النوم؟" };
-                }
-            }
+                // 1. أنطولوجيا الأعراض السريرية الشاملة
+                const SYMPTOM_RULES = [
+                    {
+                        id: "HEADACHE",
+                        title: "الصداع والصداع النصفي (الشقيقة) وتسكين الآلام العامة",
+                        keywords: ["صداع", "راس", "رأس", "شقيقة", "شقيقه", "مصدع", "يوجعني راسي", "الم بالراس", "وجع راس", "صداع شديد"],
+                        generics: ["باراسيتامول", "إيبوبروفين", "ديكلوفيناك", "كافيين"],
+                        categories: ["مسكن", "مسكنات", "خافض حرارة", "مسكن وخافض حرارة", "مسكن ومضاد للالتهاب"],
+                        advice: "يُفضل أخذ قرص من الباراسيتامول أو البنادول إكسترا بعد الأكل مع شرب كمية وافرة من الماء. في حال الصداع الشديد أو النصفي، يمكن استخدام الإيبوبروفين (بروفين) أو الرابيدوس/كتافلام.",
+                        precautions: "يُمنع استخدام الإيبوبروفين والديكلوفيناك لمرضى قرحة المعدة أو القصور الكلوي. استشر الطبيب إذا استمر الصداع لأكثر من 3 أيام."
+                    },
+                    {
+                        id: "FEVER",
+                        title: "الحمى وارتفاع درجة الحرارة وتكسير الجسم",
+                        keywords: ["حرارة", "حراره", "سخونة", "سخونه", "حمى", "حمي", "مكسر", "ساخن", "مسخن", "قشعريرة", "تنزيل الحرارة", "حرارته مرتفعة", "حرارته مرتفعه"],
+                        generics: ["باراسيتامول", "إيبوبروفين"],
+                        categories: ["خافض حرارة", "مسكن وخافض حرارة", "مسكن"],
+                        advice: "تناول الباراسيتامول (500-1000 مجم كل 6-8 ساعات عند اللزوم، بحد أقصى 4000 مجم يومياً) مع عمل كمادات ماء فاتر وتناول السوائل بكثرة.",
+                        precautions: "إذا تجاوزت الحرارة 39°C أو استمرت لأكثر من 48 ساعة دون انخفاض، يجب مراجعة الطوارئ فوراً."
+                    },
+                    {
+                        id: "STOMACH_ACIDITY",
+                        title: "حموضة وحرقة المعدة والارتجاع المريئي",
+                        keywords: ["حموضة", "حموضه", "حرقان", "حرقة", "حرقه", "ارتجاع", "قرحة", "قرحه", "معدة", "معده", "عسر هضم", "حارق", "فم المعدة"],
+                        generics: ["أوميبرازول", "بانتوبرازول", "إيسوميبرازول"],
+                        categories: ["جهاز هضمي", "معدة", "أدوية الجهاز الهضمي والمعدة"],
+                        advice: "تناول كبسولة أوميبرازول (20 مجم) صباحاً على معدة فارغة قبل الإفطار بنصف ساعة مع تجنب الأطعمة الحارة والدهنية.",
+                        precautions: "لا يُنصح بالاستخدام المستمر لأكثر من 14 يوماً دون استشارة الطبيب للتأكد من عدم وجود جرثومة المعدة."
+                    },
+                    {
+                        id: "COLIC_IBS",
+                        title: "مغص البطن والقولون العصبي والتقلصات المعوية",
+                        keywords: ["مغص", "تقلصات", "الم بطن", "ألم بطن", "وجع بطن", "قولون", "انتفاخ", "غازات", "تشنج"],
+                        generics: ["ميبفرين", "هيوسين", "ميترونيدازول", "فلاجيل"],
+                        categories: ["جهاز هضمي", "مطهر معوي", "مسكن ومضاد للتقلصات"],
+                        advice: "استخدام مضادات التقلصات قبل الوجبات بـ 20 دقيقة مع شرب السوائل الدافئة كالنعناع والبابونج والابتعاد عن مهيجات القولون.",
+                        precautions: "إذا كان الألم مصحوباً بارتفاع شديد في الحرارة أو قيء مستمر، يجب التوجه للطوارئ لاستبعاد التهاب الزائدة."
+                    },
+                    {
+                        id: "COUGH_FLU",
+                        title: "السعال والكحة والرشح والزكام والتهاب الحلق",
+                        keywords: ["كحة", "كحه", "سعال", "بلغم", "رشح", "زكام", "انفلونزا", "إنفلونزا", "التهاب حلق", "حلق", "احتقان", "عطاس", "برد"],
+                        generics: ["باراسيتامول", "أزيثرومايسين", "أموكسيسيلين", "سيتريزين", "ديكلوفيناك"],
+                        categories: ["مسكن وخافض حرارة", "مضاد حيوي", "حساسية", "جهاز تنفسي"],
+                        advice: "استخدام الباراسيتامول لتسكين احتقان الحلق وتخفيض الحرارة، ومضادات الهيستامين لتخفيف الرشح والعطاس، مع الإكثار من السوائل الدافئة.",
+                        precautions: "المضادات الحيوية لا تُصرف إلا للعدوى البكتيرية المثبتة بإشراف صيدلي أو طبيب."
+                    },
+                    {
+                        id: "JOINTS_ARTHRITIS",
+                        title: "آلام المفاصل والفقرات والتهاب العظام والروماتيزم",
+                        keywords: ["مفاصل", "ركبة", "ركبه", "خشونة", "خشونه", "روماتيزم", "عظام", "ظهر", "انزلاق", "دسك", "فقرات", "عرق النسا"],
+                        generics: ["سيليكوكسيب", "ديكلوفيناك", "ميلوكسيكام", "إيبوبروفين"],
+                        categories: ["مسكن ومضاد للالتهاب", "مسكن"],
+                        advice: "استخدام مضادات الالتهاب الانتقائية (مثل سيلبركس 200 مجم) أو ديكلوفيناك (فولتارين) بعد الأكل مباشرة لتقليل تهيج المعدة.",
+                        precautions: "الحذر مع مرضى الضغط والقصور الكلوي وقرحة المعدة. لا تتناول دوائين من عائلة NSAIDs معاً."
+                    },
+                    {
+                        id: "TOOTHACHE",
+                        title: "ألم الأسنان والتهاب اللثة وخراج الأسنان",
+                        keywords: ["اسنان", "أسنان", "ضرس", "ضرسي", "الم اسنان", "وجع اسنان", "لثة", "لثتي", "خراج"],
+                        generics: ["ديكلوفيناك", "إيبوبروفين", "حمض الميفيناميك", "أموكسيسيلين + كلافولانات"],
+                        categories: ["مسكن ومضاد للالتهاب", "مضاد حيوي", "مسكن"],
+                        advice: "تناول مسكن سريع المفعول مثل كتافلام أو رابيدوس أو بروفين بعد الأكل لتسكين الألم الحاد مع مراجعة طبيب الأسنان.",
+                        precautions: "المسكنات حل مؤقت ولا تعالج التسوس أو الالتهاب الجذري."
+                    },
+                    {
+                        id: "ALLERGY",
+                        title: "الحساسية والحكة الجلدية والأرتكاريا والتهاب الجلد",
+                        keywords: ["حساسية", "حساسيه", "حكة", "حكه", "هرش", "ارتكاريا", "طفح", "اكزيما"],
+                        generics: ["سيتريزين", "لوراتادين"],
+                        categories: ["حساسية", "مضاد هيستامين", "جلدية"],
+                        advice: "تناول قرص مضاد للهيستامين (مثل سيتريزين 10 مجم) مساءً قبل النوم مع مرطب للبشرة.",
+                        precautions: "قد تسبب بعض مضادات الحساسية النعاس، لذا يُفضل تجنب القيادة بعد تناولها."
+                    },
+                    {
+                        id: "DIABETES",
+                        title: "مرض السكري وتنظيم مستوى السكر في الدم",
+                        keywords: ["سكري", "سكر", "تراكمي", "مريض سكر", "ارتفاع السكر"],
+                        generics: ["ميتفورمين", "جلوكوفاج"],
+                        categories: ["أدوية السكري", "سكري"],
+                        advice: "تناول أدوية منظم السكر أثناء أو بعد الوجبات مباشرة لتقليل الاضطرابات الهضمية مع الالتزام بالحمية الغذائية.",
+                        precautions: "المتابعة الدورية لفحص السكر التراكمي ووظائف الكلى واستشارة الطبيب المعالج."
+                    },
+                    {
+                        id: "HYPERTENSION",
+                        title: "ارتفاع ضغط الدم وصحة القلب",
+                        keywords: ["ضغط", "ضغط دم", "ارتفاع الضغط", "مريض ضغط", "ضغط مرتفع"],
+                        generics: ["بيسوبرولول", "أملوديبين", "فالسارتان"],
+                        categories: ["أدوية الضغط", "قلب وأوعية دموية", "ضغط"],
+                        advice: "تناول دواء الضغط بانتظام يومياً في نفس الموعد مع تقليل الملح وممارسة الرياضة.",
+                        precautions: "عدم إيقاف دواء الضغط فجأة لتجنب الارتفاع الارتدادي الحاد."
+                    }
+                ];
 
-            if (isFollowPregnancy) {
-                if (normC.includes('باراسيتامول') || normC.includes('بنادول') || normC.includes('صداع') || normC.includes('حرارة')) {
-                    return { reply: "### تقييم الأمان خلال الحمل والرضاعة:\n- **الباراسيتامول العادي (بنادول الأزرق / فيفادول):** آمن تماماً وهو الخيار الأول المعتمد طبياً لتسكين الألم وخفض الحرارة للحوامل.\n- **تحذير:** تجنبي بنادول إكسترا المحتوي على كافيين، والبروفين والفولتارين.\n\nهل ترغبين بمعرفة أمان أدوية أخرى للحوامل؟" };
+                // فحص ما إذا كان الاستفسار يتعلق بعارض سريري
+                for (const symptom of SYMPTOM_RULES) {
+                    const hasKeyword = symptom.keywords.some(k => q.includes(k));
+                    if (hasKeyword) {
+                        // مطابقة الأدوية في قاعدة البيانات
+                        const matched = meds.filter(m => {
+                            const gen = (m.generic_name || '').toLowerCase();
+                            const nm = (m.name || '').toLowerCase();
+                            const cat = (m.category || '').toLowerCase();
+                            return symptom.generics.some(g => gen.includes(g) || nm.includes(g)) ||
+                                   symptom.categories.some(c => cat.includes(c));
+                        }).sort((a, b) => {
+                            // المتوفر أولاً ثم الأوفر سعراً
+                            const aStock = (a.stock_quantity > 0) ? 0 : 1;
+                            const bStock = (b.stock_quantity > 0) ? 0 : 1;
+                            if (aStock !== bStock) return aStock - bStock;
+                            return parseFloat(a.price || 0) - parseFloat(b.price || 0);
+                        });
+
+                        let reply = `### التقييم السريري ودواعي الاستخدام:
+`;
+                        reply += `**الحالة المرصودة:** ${symptom.title}
+
+`;
+
+                        if (matched.length > 0) {
+                            reply += `#### الأدوية المقترحة المتوفرة حالياً في الصيدلية (مرتبة من الأوفر):\n`;
+                            matched.slice(0, 5).forEach((m, idx) => {
+                                reply += renderChatMedActionCard(m, idx === 0);
+                            });
+                        } else {
+                            reply += `**حالة المخزون:** الأدوية المباشرة لهذه الحالة نافدة حالياً من المخزون، يُرجى مراجعة الصيدلي لتوفير البدائل الطارئة.\n`;
+                        }
+
+                        reply += `\n#### إرشادات الاستخدام والجرعات الآمنة:\n${symptom.advice}\n`;
+                        reply += `\n#### محاذير وتنبيهات سريرية:\n${symptom.precautions}\n`;
+
+                        return { reply: reply, intent: 'SYMPTOM_DIAGNOSIS_RECOMMENDATION' };
+                    }
                 }
-                if (normC.includes('بروفين') || normC.includes('فولتارين') || normC.includes('كتافلام')) {
-                    return { reply: "### تحذير سريري قطعي للحوامل:\n- مسكنات مضادات الالتهاب (بروفين، فولتارين، كتافلام) **غير آمنة** أثناء الحمل ومحظورة تماماً بالثلث الأخير.\n- البديل الآمن المعتمد فوراً هو **الباراسيتامول**.\n\nهل تود استعراض خيارات الباراسيتامول المتاحة بالمخزن؟" };
-                }
-            }
 
-            if (isFollowChronic) {
-                return { reply: "### تقييم الملاءمة لمرضى الضغط وقرحة المعدة:\n- لمرضى الضغط وقرحة المعدة: يُمنع صرف البروفين والفولتارين ومشتقاتهما، والمسكن الآمن الوحيد هو **الباراسيتامول (فيفادول / أدول)**.\n\nهل تبحث عن علاج لا يتعارض مع أدويتك الحالية؟" };
-            }
-
-            if (isFollowCheaper) {
-                return { reply: "### البدائل المتكافئة بيولوجياً الأكثر توفيراً:\n- بنادول إكسترا (12 ريال) -> البديل: فيفادول أو أدول (6 ريال) [توفير 50%].\n- أوجمنتين 1 جم (45 ريال) -> البديل: ميجاموكس (28 ريال) أو كلافوكس (32 ريال).\n- نيكسيوم 40 (72 ريال) -> البديل: كونترولوك (54 ريال) أو أوميبرازول (20 ريال).\n\nاكتب اسم الصنف وسأفرز لك كل بدائله من الأرخص للأعلى فوراً." };
-            }
-        }
-
-        // 2. فحص مطابقة دواء محدد بالاسم
-        let found = meds.find(m => {
-            const n = (m.name || '').toLowerCase();
-            const g = (m.generic_name || '').toLowerCase();
-            return n.includes(q) || g.includes(q);
-        });
-
-        if (!found) {
-            const words = q.split(' ').filter(w => w.length >= 3);
-            for (const w of words) {
-                found = meds.find(m => {
+                // 2. البحث عن دواء مطابق بالاسم التجاري أو العلمي
+                let found = meds.find(m => {
                     const n = (m.name || '').toLowerCase();
                     const g = (m.generic_name || '').toLowerCase();
-                    return n.includes(w) || g.includes(w);
+                    return n.includes(q) || g.includes(q);
                 });
-                if (found) break;
-            }
-        }
 
-        if (found) {
-            const alts = meds.filter(m => m.id !== found.id && m.generic_name && found.generic_name && m.generic_name.toLowerCase() === found.generic_name.toLowerCase()).sort((a, b) => a.price - b.price);
-            let reply = `### نتيجة البحث: **${found.name}**\n`;
-            reply += renderChatMedActionCard(found);
+                if (!found) {
+                    const words = q.split(' ').filter(w => w.length >= 3);
+                    for (const w of words) {
+                        found = meds.find(m => {
+                            const n = (m.name || '').toLowerCase();
+                            const g = (m.generic_name || '').toLowerCase();
+                            return n.includes(w) || g.includes(w);
+                        });
+                        if (found) break;
+                    }
+                }
 
-            if (alts.length > 0) {
-                reply += `\n#### البدائل المتكافئة المسجلة بالصيدلية (مرتبة حسب السعر):\n`;
-                alts.forEach((alt, idx) => {
-                    reply += renderChatMedActionCard(alt, idx === 0 && alt.price < found.price);
+                if (found) {
+                    const alts = meds.filter(m => m.id !== found.id && m.generic_name && found.generic_name && m.generic_name.toLowerCase() === found.generic_name.toLowerCase()).sort((a, b) => a.price - b.price);
+                    let reply = `### نتيجة البحث: **${found.name}**\n`;
+                    reply += renderChatMedActionCard(found);
+
+                    if (alts.length > 0) {
+                        reply += `\n#### البدائل المتكافئة المسجلة بالنظام (مرتبة حسب السعر):\n`;
+                        alts.forEach((alt, idx) => {
+                            reply += renderChatMedActionCard(alt, idx === 0 && alt.price < found.price);
+                        });
+                    }
+                    return { reply: reply };
+                }
+
+                // 3. فحص الاستفسار عن تصنيف علاجي كامل (مثل: مضادات، مسكنات، سكري)
+                const matchedCategory = meds.filter(m => {
+                    const c = (m.category || '').toLowerCase();
+                    return q.includes('مضاد') && c.includes('مضاد') ||
+                           q.includes('مسكن') && c.includes('مسكن') ||
+                           q.includes('معدة') && c.includes('معدة') ||
+                           q.includes('سكري') && c.includes('سكري');
                 });
+
+                if (matchedCategory.length > 0) {
+                    let reply = `### الأصناف المتوفرة في قاعدة البيانات ضمن هذا التصنيف:\n`;
+                    matchedCategory.slice(0, 8).forEach((m, idx) => {
+                        reply += `${idx + 1}. **${m.name}** — **${parseFloat(m.price).toFixed(2)} ريال** (الرصيد: ${m.stock_quantity} علبة)\n`;
+                    });
+                    return { reply: reply };
+                }
+
+                return {
+                    reply: "لم أتمكن من التعرف على الاستفسار أو الدواء المطلوب بدقة.\n\nيمكنك سؤالي عن أعراض المريض مثل:\n- 'ابغى دواء لمريض يعاني من صداع'\n- 'علاج لحموضة وحرقة المعدة'\n- 'مسكن لآلام المفاصل والأسنان'\n- 'علاج للكحة والزكام والرشح'\n\nأو اكتب اسم الدواء التجاري أو العلمي مباشرة (مثل: بنادول، أوجمنتين، بروفين، أوميبرازول)."
+                };
             }
-            reply += `\n*(يا غالي، تقدر تسألني: 'كم حبة آخذ؟'، 'هل ينفع للحامل؟'، أو 'في بديل أرخص؟')*`;
-            return { reply: reply };
-        }
-
-        // 3. البحث الدلالي الحي في بيانات وتوصيف الأدوية المسجلة في المخزن (Zero Hardcoded Rules)
-        const stopWords = ['عندي', 'ابغي', 'ابغى', 'اريد', 'محتاج', 'احتاج', 'في', 'من', 'دواء', 'علاج', 'حبوب', 'مرهم', 'شراب', 'بدي', 'لدي', 'اعاني'];
-        const qTokens = q.split(/\s+/).filter(w => w.length >= 3 && !stopWords.includes(w));
-
-        const scored = [];
-        for (const m of meds) {
-            const desc = (m.description || '').toLowerCase();
-            const cat = (m.category || '').toLowerCase();
-            const nm = (m.name || '').toLowerCase();
-            const gen = (m.generic_name || '').toLowerCase();
-
-            let score = 0;
-            // تطابق العبارة الكاملة
-            if (desc.includes(q)) score += 30;
-            if (cat.includes(q)) score += 25;
-            if (nm.includes(q)) score += 35;
-
-            // تطابق الكلمات المفتاحية
-            for (const t of qTokens) {
-                if (desc.includes(t)) score += 8;
-                if (cat.includes(t)) score += 7;
-                if (nm.includes(t)) score += 12;
-                if (gen.includes(t)) score += 10;
-            }
-
-            if (score >= 7) {
-                scored.push({ med: m, score: score });
-            }
-        }
-
-        scored.sort((a, b) => b.score - a.score);
-
-        if (scored.length > 0) {
-            const topMeds = scored.slice(0, 4).map(s => s.med);
-            let reply = `### الأدوية الموصى بها المسجلة بقاعدة بيانات الصيدلية:\n`;
-            topMeds.forEach((m, idx) => {
-                reply += renderChatMedActionCard(m, idx === 0);
-            });
-            reply += `\n#### دواعي الاستعمال من وصف الصنف الفعلي بالمخزن:\n`;
-            topMeds.slice(0, 2).forEach(m => {
-                reply += `- **${m.name}:** ${m.description || m.category}\n`;
-            });
-            reply += `\n*(يا غالي، تقدر تسألني: 'كم حبة آخذ؟'، 'هل ينفع للحامل؟'، أو 'في بديل أرخص؟')*`;
-            return { reply: reply };
-        }
-
-        return { reply: "سلامتك يا غالي، ما لقيت دواء مسجل بالمخزن يطابق هذا الوصف بالتحديد. تقدر تكتب لي اسم الدواء التجاري أو توضح الأعراض أكثر وسأطلع لك المتوفر فوراً." };
-    }
 
             function stripClientEmojis(str) {
                 if (!str) return '';

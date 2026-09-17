@@ -387,8 +387,14 @@
                 if (autoAdd === '1' || autoAdd === 'true') {
                     addItemToInvoice();
                     if (typeof showNotification === 'function') {
-                        showNotification(`تمت إضافة صنف «${targetMed.name}» إلى الفاتورة مباشرة من المساعد الذكي.`, 'success');
+                        showNotification(`تم صرف وإدراج صنف «${targetMed.name}» في الفاتورة مباشرة من المساعد الذكي.`, 'success');
                     }
+                    setTimeout(() => {
+                        const cartSec = document.getElementById('cartTableBody');
+                        if (cartSec) {
+                            cartSec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 200);
                 }
             }
         }

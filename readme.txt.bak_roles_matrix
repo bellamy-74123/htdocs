@@ -1,0 +1,48 @@
+========================================================================
+COLLEGE OF COMPUTER & INFORMATION TECHNOLOGY (2026 / 2027)
+ARTIFICIAL INTELLIGENCE COURSE PROJECT
+========================================================================
+
+Project Title:
+Smart Pharmacy & AI-Powered Inventory Management System (SPMS)
+
+Course: Artificial Intelligence
+Supervisor: Dr. Ayham Al-Akhali
+
+------------------------------------------------------------------------
+Team Members (Group Names):
+------------------------------------------------------------------------
+1. Abdullah Al-Bous
+2. Mohammed Qahri
+3. Ibrahim Ibrahim
+4. Mohammed Al-Sayedi
+
+------------------------------------------------------------------------
+Core AI Algorithms Implemented:
+------------------------------------------------------------------------
+1. Supervised Machine Learning: Random Forest Regressor & Ridge Regression
+   - Task: Daily Medicine Demand Forecasting & Dynamic Reorder Point (ROP)
+   - Evaluation Metrics: MAE (0.87 units), RMSE (1.119), R^2 Score (0.8763)
+2. Unsupervised Machine Learning: Apriori Association Rule Mining
+   - Task: Market Basket Co-Prescription Analysis & Clinical Recommendations
+   - Evaluation Metrics: Support (>= 3%), Confidence (>= 40%), Lift (> 2.0x)
+3. Natural Language Processing (NLP):
+   - Task: Symptom Extraction, Similarity Matching & Arabic Pharmacy Chatbot
+4. Heuristic Search & Sorting:
+   - Task: Dynamic First Expired, First Out (FEFO) Batch Allocation
+
+------------------------------------------------------------------------
+How to Run the Project:
+------------------------------------------------------------------------
+1. Run Fast AI Evaluation CLI:
+   py ai-engine/evaluate_academic_metrics.py
+
+2. Run All Automated Test Suites:
+   py tests/test_prediction.py
+   py tests/test_ml_training.py
+
+3. Run 1-Click Complete System:
+   run_project.bat
+   or:
+   .\run_project.ps1
+========================================================================
